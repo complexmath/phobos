@@ -921,6 +921,24 @@ void setMaxMailboxSize( Tid tid, size_t messages, bool function(Tid) onCrowdingD
 
 
 //////////////////////////////////////////////////////////////////////////////
+// MessageBox Info
+//////////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * Returns the number of messages in the calling thread's local queue.
+ *
+ * Returns the number of messages in the calling thread's local queue.  This
+ * may be less than the total number of queued messages, as each threads has a
+ * shared queue which is periodically merged with the local queue.
+ */
+@property size_t queuedMessageCount()
+{
+    return tid.mbox.localMsgCount();
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
 // Name Registration
 //////////////////////////////////////////////////////////////////////////////
 
@@ -1724,7 +1742,7 @@ private
 
 
         /*
-         *
+         * Returns true if the MessageBox is closed.
          */
         final @property bool isClosed() const
         {
@@ -1732,6 +1750,15 @@ private
             {
                 return m_closed;
             }
+        }
+
+
+        /*
+         * Returns the number of messages in the thread's local queue.
+         */
+        final @property size_t localMsgCount() const
+        {
+            return m_localBox.length;
         }
 
 
