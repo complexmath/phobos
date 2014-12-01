@@ -934,7 +934,7 @@ void setMaxMailboxSize( Tid tid, size_t messages, bool function(Tid) onCrowdingD
  */
 @property size_t queuedMessageCount()
 {
-    return tid.mbox.localMsgCount();
+    return thisTid.mbox.localMsgCount;
 }
 
 
@@ -1756,7 +1756,7 @@ private
         /*
          * Returns the number of messages in the thread's local queue.
          */
-        final @property size_t localMsgCount() const
+        final @property size_t localMsgCount() const nothrow
         {
             return m_localBox.length;
         }
@@ -2284,7 +2284,7 @@ private
         /*
          *
          */
-        @property size_t length()
+        @property size_t length() const nothrow
         {
             return m_count;
         }
