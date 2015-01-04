@@ -2318,44 +2318,18 @@ private
         }
 
 
-        __gshared Node* sm_freeNodes = null;
-        __gshared Mutex sm_freeLock  = null;
-
-
-        shared static this()
-        {
-            sm_freeLock = new Mutex;
-        }
-
+        static shared Node* sm_freeNodes = null;
 
         Node* newNode( T v )
         {
-            Node* n = null;
-            synchronized( sm_freeLock )
-            {
-                if( sm_freeNodes !is null )
-                {
-                    n = sm_freeNodes;
-                    sm_freeNodes = n.next;
-                }
-            }
-            if( n !is null )
-            {
-                n.next = null;
-                n.val  = v;
-                return n;
-            }
-            return new Node( v );
-
             // lock-free shared freelist
-            /+ NOTE: This is really really slow.
             Node* n = null;
             n = cast(Node*) sm_freeNodes.atomicLoad!(MemoryOrder.raw)();
             while( n !is null )
             {
                 if( cas( &sm_freeNodes,
-                         cast(shared(Node)*) n.next,
-                         cast(shared(Node)*) n ) )
+                         cast(shared(Node)*) n,
+                         cast(shared(Node)*) n.next ) )
                 {
                     n.next = null;
                     n.val  = v;
@@ -2364,26 +2338,16 @@ private
                 n = cast(Node*) sm_freeNodes.atomicLoad!(MemoryOrder.raw)();
             }
             return new Node( v );
-            +/
         }
-
 
         void freeNode( Node* n )
         {
-            synchronized( sm_freeLock )
-            {
-                n.next = sm_freeNodes;
-                sm_freeNodes = n;
-            }
-
             // lock-free shared freelist
-            /+ NOTE: This is really really slow.
             do
             {
                 n.next = cast(Node*) sm_freeNodes.atomicLoad!(MemoryOrder.raw)();
-            } while( !cas( &sm_freeNodes, cast(shared(Node)*) n,
-                           cast(shared(Node)*) n.next ) );
-            +/
+            } while( !cas( &sm_freeNodes, cast(shared(Node)*) n.next,
+                           cast(shared(Node)*) n ) );
         }
 
 
