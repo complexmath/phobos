@@ -1,4 +1,7 @@
 /**
+ * This module describes the digest APIs used in Phobos. All digests follow these APIs.
+ * Additionally, this module contains useful helper methods which can be used with every _digest type.
+ *
 <script type="text/javascript">inhibitQuickIndex = 1</script>
 
 $(BOOKTABLE ,
@@ -17,9 +20,6 @@ $(TR $(TDNW Implementation helpers) $(TD $(MYREF digestLength) $(MYREF WrapperDi
 )
 )
 
- * This module describes the digest APIs used in Phobos. All digests follow these APIs.
- * Additionally, this module contains useful helper methods which can be used with every _digest type.
- *
  * APIs:
  * There are two APIs for digests: The template API and the OOP API. The template API uses structs
  * and template helpers like $(LREF isDigest). The OOP API implements digests as classes inheriting
@@ -46,7 +46,6 @@ $(TR $(TDNW Implementation helpers) $(TD $(MYREF digestLength) $(MYREF WrapperDi
  * Source:    $(PHOBOSSRC std/_digest/_digest.d)
  *
  * Macros:
- * MYREF = <font face='Consolas, "Bitstream Vera Sans Mono", "Andale Mono", Monaco, "DejaVu Sans Mono", "Lucida Console", monospace'><a href="#$1">$1</a>&nbsp;</font>
  * MYREF2 = <font face='Consolas, "Bitstream Vera Sans Mono", "Andale Mono", Monaco, "DejaVu Sans Mono", "Lucida Console", monospace'><a href="#$2">$1</a>&nbsp;</font>
  * MYREF3 = <a href="#$2">$(D $1)</a>
  *
@@ -64,9 +63,10 @@ $(TR $(TDNW Implementation helpers) $(TD $(MYREF digestLength) $(MYREF WrapperDi
  */
 module std.digest.digest;
 
-import std.range, std.traits;
+import std.traits;
 import std.typetuple : allSatisfy;
 public import std.ascii : LetterCase;
+
 
 ///
 unittest
@@ -280,6 +280,7 @@ unittest
  */
 template isDigest(T)
 {
+    import std.range : isOutputRange;
     enum bool isDigest = isOutputRange!(T, const(ubyte)[]) && isOutputRange!(T, ubyte) &&
         is(T == struct) &&
         is(typeof(
@@ -387,6 +388,7 @@ unittest
 private template isDigestibleRange(Range)
 {
     import std.digest.md;
+    import std.range : isInputRange, ElementType;
     enum bool isDigestibleRange = isInputRange!Range && is(typeof(
           {
           MD5 ha; //Could use any conformant hash
@@ -416,6 +418,7 @@ DigestType!Hash digest(Hash, Range)(auto ref Range range) if(!isArray!Range
 unittest
 {
     import std.digest.md;
+    import std.range : repeat;
     auto testRange = repeat!ubyte(cast(ubyte)'a', 100);
     auto md5 = digest!MD5(testRange);
 }
@@ -472,6 +475,7 @@ char[digestLength!(Hash)*2] hexDigest(Hash, Order order = Order.increasing, Rang
 unittest
 {
     import std.digest.md;
+    import std.range : repeat;
     auto testRange = repeat!ubyte(cast(ubyte)'a', 100);
     assert(hexDigest!MD5(testRange) == "36A92CC94A9E0FA21F625F8BFB007ADF");
 }
@@ -627,6 +631,7 @@ unittest
 
 unittest
 {
+    import std.range : isOutputRange;
     assert(!isDigest!(Digest));
     assert(isOutputRange!(Digest, ubyte));
 }
@@ -736,6 +741,7 @@ string toHexString(Order order = Order.increasing, LetterCase letterCase = Lette
     }
     else
     {
+        import std.range : retro;
         foreach(u; retro(digest))
         {
             result[i++] = hexDigits[u >> 4];

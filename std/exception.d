@@ -44,8 +44,10 @@
  +/
 module std.exception;
 
-import std.array, std.conv, std.range, std.string, std.traits;
-import core.exception, core.stdc.errno, core.stdc.string;
+import std.traits;
+
+import core.stdc.errno;
+import core.stdc.string;
 
 /++
     Asserts that the given expression does $(I not) throw the given type
@@ -74,22 +76,24 @@ void assertNotThrown(T : Throwable = Exception, E)
                      string file = __FILE__,
                      size_t line = __LINE__)
 {
+    import core.exception : AssertError;
     try
     {
         expression();
     }
     catch (T t)
     {
-        immutable message = msg.empty ? t.msg : msg;
-        immutable tail = message.empty ? "." : ": " ~ message;
-        throw new AssertError(format("assertNotThrown failed: %s was thrown%s",
-                                     T.stringof, tail),
-                              file, line, t);
+        immutable message = msg.length == 0 ? t.msg : msg;
+        immutable tail = message.length == 0 ? "." : ": " ~ message;
+        throw new AssertError("assertNotThrown failed: " ~ T.stringof ~ " was thrown" ~ tail, file, line, t);
     }
 }
 ///
 unittest
 {
+    import core.exception : AssertError;
+
+    import std.string;
     assertNotThrown!StringException(enforce!StringException(true, "Error!"));
 
     //Exception is the default.
@@ -101,6 +105,8 @@ unittest
 }
 unittest
 {
+    import core.exception : AssertError;
+    import std.string;
     assert(collectExceptionMsg!AssertError(assertNotThrown!StringException(
                enforce!StringException(false, ""), "Error!")) ==
            `assertNotThrown failed: StringException was thrown: Error!`);
@@ -116,6 +122,8 @@ unittest
 
 unittest
 {
+    import core.exception : AssertError;
+
     void throwEx(Throwable t) { throw t; }
     void nothrowEx() { }
 
@@ -213,18 +221,22 @@ void assertThrown(T : Throwable = Exception, E)
                   string file = __FILE__,
                   size_t line = __LINE__)
 {
+    import core.exception : AssertError;
+
     try
         expression();
     catch (T)
         return;
-
-    throw new AssertError(format("assertThrown failed: No %s was thrown%s%s",
-                                 T.stringof, msg.empty ? "." : ": ", msg),
+    throw new AssertError("assertThrown failed: No " ~ T.stringof ~ " was thrown"
+                                 ~ (msg.length == 0 ? "." : ": ") ~ msg,
                           file, line);
 }
 ///
 unittest
 {
+    import core.exception : AssertError;
+    import std.string;
+
     assertThrown!StringException(enforce!StringException(false, "Error!"));
 
     //Exception is the default.
@@ -237,6 +249,8 @@ unittest
 
 unittest
 {
+    import core.exception : AssertError;
+
     void throwEx(Throwable t) { throw t; }
     void nothrowEx() { }
 
@@ -576,6 +590,8 @@ template enforceEx(E : Throwable)
 
 unittest
 {
+    import std.array : empty;
+    import core.exception : OutOfMemoryError;
     assertNotThrown(enforceEx!Exception(true));
     assertNotThrown(enforceEx!Exception(true, "blah"));
     assertNotThrown(enforceEx!OutOfMemoryError(true));
@@ -720,6 +736,7 @@ unittest
 +/
 string collectExceptionMsg(T = Exception, E)(lazy E expression)
 {
+    import std.array : empty;
     try
     {
         expression();
@@ -893,12 +910,14 @@ T assumeWontThrow(T)(lazy T expr,
                      string file = __FILE__,
                      size_t line = __LINE__) nothrow
 {
+    import core.exception : AssertError;
     try
     {
         return expr;
     }
     catch(Exception e)
     {
+        import std.range.primitives : empty;
         immutable tail = msg.empty ? "." : ": " ~ msg;
         throw new AssertError("assumeWontThrow failed: Expression did throw" ~
                               tail, file, line);
@@ -933,6 +952,8 @@ unittest
 
 unittest
 {
+    import core.exception : AssertError;
+
     void alwaysThrows()
     {
         throw new Exception("I threw up");
@@ -962,12 +983,12 @@ check if $(D source) points to $(D target), $(I not) what $(D target) references
 If $(D source) is or contains a union, then there may be either false positives or
 false negatives:
 
-$(D doesPointTo) will return $(D true) if it is absolutly certain
+$(D doesPointTo) will return $(D true) if it is absolutely certain
 $(D source) points to $(D target). It may produce false negatives, but never
 false positives. This function should be prefered when trying to validate
 input data.
 
-$(D mayPointTo) will return $(D false) if it is absolutly certain
+$(D mayPointTo) will return $(D false) if it is absolutely certain
 $(D source) does not point to $(D target). It may produce false positives, but never
 false negatives. This function should be prefered for defensively choosing a
 code path.
@@ -1003,6 +1024,7 @@ bool doesPointTo(S, T, Tdummy=void)(auto ref const S source, ref const T target)
     }
     else static if (isDynamicArray!S)
     {
+        import std.array : overlap;
         return overlap(cast(void[])source, cast(void[])(&target)[0 .. 1]).length != 0;
     }
     else
@@ -1036,6 +1058,7 @@ bool mayPointTo(S, T, Tdummy=void)(auto ref const S source, ref const T target) 
     }
     else static if (isDynamicArray!S)
     {
+        import std.array : overlap;
         return overlap(cast(void[])source, cast(void[])(&target)[0 .. 1]).length != 0;
     }
     else
@@ -1403,7 +1426,7 @@ class ErrnoException : Exception
         {
             auto s = core.stdc.string.strerror(errno);
         }
-        super(msg~" ("~to!string(s)~")", file, line);
+        super(msg ~ " (" ~ s[0..s.strlen].idup ~ ")", file, line);
     }
 }
 
@@ -1471,7 +1494,7 @@ class ErrnoException : Exception
 CommonType!(T1, T2) ifThrown(E : Throwable = Exception, T1, T2)(lazy scope T1 expression, lazy scope T2 errorHandler)
 {
     static assert(!is(typeof(return) == void),
-            "The error handler's return value("~T2.stringof~") does not have a common type with the expression("~T1.stringof~").");
+            "The error handler's return value(" ~ T2.stringof ~ ") does not have a common type with the expression(" ~ T1.stringof ~ ").");
     try
     {
         return expression();
@@ -1487,7 +1510,7 @@ CommonType!(T1, T2) ifThrown(E : Throwable = Exception, T1, T2)(lazy scope T1 ex
 CommonType!(T1, T2) ifThrown(E : Throwable, T1, T2)(lazy scope T1 expression, scope T2 delegate(E) errorHandler)
 {
     static assert(!is(typeof(return) == void),
-            "The error handler's return value("~T2.stringof~") does not have a common type with the expression("~T1.stringof~").");
+            "The error handler's return value(" ~ T2.stringof ~ ") does not have a common type with the expression(" ~ T1.stringof ~ ").");
     try
     {
         return expression();
@@ -1503,7 +1526,7 @@ CommonType!(T1, T2) ifThrown(E : Throwable, T1, T2)(lazy scope T1 expression, sc
 CommonType!(T1, T2) ifThrown(T1, T2)(lazy scope T1 expression, scope T2 delegate(Exception) errorHandler)
 {
     static assert(!is(typeof(return) == void),
-            "The error handler's return value("~T2.stringof~") does not have a common type with the expression("~T1.stringof~").");
+            "The error handler's return value(" ~ T2.stringof ~ ") does not have a common type with the expression(" ~ T1.stringof ~ ").");
     try
     {
         return expression();
@@ -1517,6 +1540,8 @@ CommonType!(T1, T2) ifThrown(T1, T2)(lazy scope T1 expression, scope T2 delegate
 //Verify Examples
 unittest
 {
+    import std.string;
+    import std.conv;
     //Revert to a default value upon an error:
     assert("x".to!int().ifThrown(0) == 0);
 
@@ -1547,6 +1572,9 @@ unittest
 
 unittest
 {
+    import std.string;
+    import std.conv;
+    import core.exception;
     //Basic behaviour - all versions.
     assert("1".to!int().ifThrown(0) == 1);
     assert("x".to!int().ifThrown(0) == 0);

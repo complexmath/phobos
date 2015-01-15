@@ -51,9 +51,8 @@ Distributed under the Boost Software License, Version 1.0.
 */
 module std.encoding;
 
-import std.string;
 import std.traits;
-import std.range;
+import std.range.primitives;
 
 unittest
 {
@@ -1742,7 +1741,6 @@ body
 Encodes $(D c) in units of type $(D E) and writes the result to the
 output range $(D R). Returns the number of $(D E)s written.
  */
-
 size_t encode(E, R)(dchar c, auto ref R range)
 if (isNativeOutputRange!(R, E))
 {
@@ -1750,28 +1748,28 @@ if (isNativeOutputRange!(R, E))
     {
         if (c <= 0x7F)
         {
-            doPut(range, cast(char) c);
+            put(range, cast(char) c);
             return 1;
         }
         if (c <= 0x7FF)
         {
-            doPut(range, cast(char)(0xC0 | (c >> 6)));
-            doPut(range, cast(char)(0x80 | (c & 0x3F)));
+            put(range, cast(char)(0xC0 | (c >> 6)));
+            put(range, cast(char)(0x80 | (c & 0x3F)));
             return 2;
         }
         if (c <= 0xFFFF)
         {
-            doPut(range, cast(char)(0xE0 | (c >> 12)));
-            doPut(range, cast(char)(0x80 | ((c >> 6) & 0x3F)));
-            doPut(range, cast(char)(0x80 | (c & 0x3F)));
+            put(range, cast(char)(0xE0 | (c >> 12)));
+            put(range, cast(char)(0x80 | ((c >> 6) & 0x3F)));
+            put(range, cast(char)(0x80 | (c & 0x3F)));
             return 3;
         }
         if (c <= 0x10FFFF)
         {
-            doPut(range, cast(char)(0xF0 | (c >> 18)));
-            doPut(range, cast(char)(0x80 | ((c >> 12) & 0x3F)));
-            doPut(range, cast(char)(0x80 | ((c >> 6) & 0x3F)));
-            doPut(range, cast(char)(0x80 | (c & 0x3F)));
+            put(range, cast(char)(0xF0 | (c >> 18)));
+            put(range, cast(char)(0x80 | ((c >> 12) & 0x3F)));
+            put(range, cast(char)(0x80 | ((c >> 6) & 0x3F)));
+            put(range, cast(char)(0x80 | (c & 0x3F)));
             return 4;
         }
         else
@@ -1783,16 +1781,16 @@ if (isNativeOutputRange!(R, E))
     {
         if (c <= 0xFFFF)
         {
-            range.doPut(cast(wchar) c);
+            range.put(cast(wchar) c);
             return 1;
         }
-        range.doPut(cast(wchar) ((((c - 0x10000) >> 10) & 0x3FF) + 0xD800));
-        range.doPut(cast(wchar) (((c - 0x10000) & 0x3FF) + 0xDC00));
+        range.put(cast(wchar) ((((c - 0x10000) >> 10) & 0x3FF) + 0xD800));
+        range.put(cast(wchar) (((c - 0x10000) & 0x3FF) + 0xDC00));
         return 2;
     }
     else static if (is(Unqual!E == dchar))
     {
-        range.doPut(c);
+        range.put(c);
         return 1;
     }
     else
@@ -1800,8 +1798,10 @@ if (isNativeOutputRange!(R, E))
         static assert(0);
     }
 }
+
 unittest
 {
+    import std.array;
     Appender!(char[]) r;
     assert(encode!(char)('T', r) == 1);
     assert(encode!(wchar)('T', r) == 1);
@@ -1838,6 +1838,26 @@ in
 body
 {
     EncoderInstance!(E).encode(c,dg);
+}
+
+/**
+Encodes the contents of $(D s) in units of type $(D Tgt), writing the result to an
+output range.
+
+Returns: The number of $(D Tgt) elements written.
+Params:
+Tgt = Element type of $(D range).
+s = Input array.
+range = Output range.
+ */
+size_t encode(Tgt, Src, R)(in Src[] s, R range)
+{
+    size_t result;
+    foreach (c; s)
+    {
+        result += encode!(Tgt)(c, range);
+    }
+    return result;
 }
 
 /**
@@ -1948,25 +1968,7 @@ unittest
 }
 
 /**
-Encodes $(D c) in units of type $(D E) and writes the result to the
-output range $(D R). Returns the number of $(D E)s written.
- */
-
-size_t encode(Tgt, Src, R)(in Src[] s, R range)
-{
-    size_t result;
-    foreach (c; s)
-    {
-        result += encode!(Tgt)(c, range);
-    }
-    return result;
-}
-
-/**
- Convert a string from one encoding to another. (See also to!() below).
-
- The input to this function MUST be validly encoded.
- This is enforced by the function's in-contract.
+ Convert a string from one encoding to another.
 
  Supersedes:
  This function supersedes std.utf.toUTF8(), std.utf.toUTF16() and
@@ -1976,8 +1978,12 @@ size_t encode(Tgt, Src, R)(in Src[] s, R range)
  Standards: Unicode 5.0, ASCII, ISO-8859-1, WINDOWS-1252
 
  Params:
-    s = the source string
-    r = the destination string
+    s = Source string. $(B Must) be validly encoded.
+        This is enforced by the function's in-contract.
+    r = Destination string
+
+ See_Also:
+    $(XREF conv, to)
 
  Examples:
  --------------------------------------------------------
@@ -2041,6 +2047,7 @@ body
 
 unittest
 {
+    import std.range;
     import std.typetuple;
     {
         import std.conv : to;
@@ -2125,6 +2132,8 @@ class UnrecognizedEncodingException : EncodingException
 /** Abstract base class of all encoding schemes */
 abstract class EncodingScheme
 {
+    import std.uni : toLower;
+
     /**
      * Registers a subclass of EncodingScheme.
      *
@@ -2167,7 +2176,7 @@ abstract class EncodingScheme
      */
     static EncodingScheme create(string encodingName)
     {
-        auto p = std.string.toLower(encodingName) in supported;
+        auto p = toLower(encodingName) in supported;
         if (p is null)
             throw new EncodingException("Unrecognized Encoding: "~encodingName);
         string className = *p;

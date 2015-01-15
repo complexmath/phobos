@@ -24,22 +24,11 @@ module std.format;
 
 //debug=format;                // uncomment to turn on debugging printf's
 
-import core.stdc.stdio, core.stdc.stdlib, core.stdc.string, core.vararg;
-import std.algorithm, std.ascii, std.conv,
-    std.exception, std.range,
-    std.system, std.traits, std.typetuple,
-    std.utf;
-version (CRuntime_Microsoft) {
-    import std.math : isNaN, isInfinity;
-}
-version(unittest) {
-    import std.math;
-    import std.stdio;
-    import std.string;
-    import std.typecons;
-    import core.exception;
-    import std.string;
-}
+import core.vararg;
+import std.exception;
+import std.range.primitives;
+import std.traits;
+import std.typetuple;
 
 version(CRuntime_DigitalMars)
 {
@@ -427,6 +416,8 @@ My friends are John, Nancy.
  */
 uint formattedWrite(Writer, Char, A...)(Writer w, in Char[] fmt, A args)
 {
+    import std.conv : text, to;
+
     alias FPfmt = void function(Writer, const(void)*, ref FormatSpec!Char) @safe pure nothrow;
 
     auto spec = FormatSpec!Char(fmt);
@@ -532,6 +523,7 @@ uint formattedWrite(Writer, Char, A...)(Writer w, in Char[] fmt, A args)
 
 @safe pure unittest
 {
+    import std.array;
     auto w = appender!string();
     formattedWrite(w, "%s %d", "@safe/pure", 42);
     assert(w.data == "@safe/pure 42");
@@ -652,6 +644,10 @@ template FormatSpec(Char)
 struct FormatSpec(Char)
     if (is(Unqual!Char == Char))
 {
+    import std.ascii : isDigit;
+    import std.algorithm : startsWith;
+    import std.conv : parse, text, to;
+
     /**
        Minimum _width, default $(D 0).
      */
@@ -825,6 +821,7 @@ struct FormatSpec(Char)
 
     unittest
     {
+        import std.array;
         auto w = appender!(char[])();
         auto f = FormatSpec("abc%sdef%sghi");
         f.writeUpToNextSpec(w);
@@ -924,12 +921,12 @@ struct FormatSpec(Char)
                                 text("Incorrect format specifier: %",
                                         trailing[j .. $]));
                     }
-                    nested = to!(typeof(nested))(trailing[i + 1 .. k - 1]);
-                    sep = to!(typeof(nested))(trailing[k + 1 .. j - 1]);
+                    nested = trailing[i + 1 .. k - 1];
+                    sep = trailing[k + 1 .. j - 1];
                 }
                 else
                 {
-                    nested = to!(typeof(nested))(trailing[i + 1 .. j - 1]);
+                    nested = trailing[i + 1 .. j - 1];
                     sep = null; // use null (issue 12135)
                 }
                 //this = FormatSpec(innerTrailingSpec);
@@ -948,7 +945,7 @@ struct FormatSpec(Char)
                     // a '*' followed by digits and '$' is a
                     // positional format
                     trailing = trailing[1 .. $];
-                    width = -.parse!(typeof(width))(trailing);
+                    width = -parse!(typeof(width))(trailing);
                     i = 0;
                     enforceFmt(trailing[i++] == '$',
                         "$ expected");
@@ -961,7 +958,7 @@ struct FormatSpec(Char)
                 break;
             case '1': .. case '9':
                 auto tmp = trailing[i .. $];
-                const widthOrArgIndex = .parse!uint(tmp);
+                const widthOrArgIndex = parse!uint(tmp);
                 enforceFmt(tmp.length,
                     text("Incorrect format specifier %", trailing[i .. $]));
                 i = tmp.ptr - trailing.ptr;
@@ -971,7 +968,7 @@ struct FormatSpec(Char)
                     indexEnd = indexStart = to!ubyte(widthOrArgIndex);
                     ++i;
                 }
-                else if (tmp.length && tmp[0] == ':')
+                else if (tmp.startsWith(':'))
                 {
                     // two indexes of the form %m:n$, or one index of the form %m:$
                     indexStart = to!ubyte(widthOrArgIndex);
@@ -982,7 +979,7 @@ struct FormatSpec(Char)
                     }
                     else
                     {
-                        indexEnd = .parse!(typeof(indexEnd))(tmp);
+                        indexEnd = parse!(typeof(indexEnd))(tmp);
                     }
                     i = tmp.ptr - trailing.ptr;
                     enforceFmt(trailing[i++] == '$',
@@ -1004,7 +1001,7 @@ struct FormatSpec(Char)
                         // positional precision
                         trailing = trailing[i .. $];
                         i = 0;
-                        precision = -.parse!int(trailing);
+                        precision = -parse!int(trailing);
                         enforceFmt(trailing[i++] == '$',
                             "$ expected");
                     }
@@ -1019,13 +1016,13 @@ struct FormatSpec(Char)
                     // negative precision, as good as 0
                     precision = 0;
                     auto tmp = trailing[i .. $];
-                    .parse!int(tmp); // skip digits
+                    parse!int(tmp); // skip digits
                     i = tmp.ptr - trailing.ptr;
                 }
                 else if (isDigit(trailing[i]))
                 {
                     auto tmp = trailing[i .. $];
-                    precision = .parse!int(tmp);
+                    precision = parse!int(tmp);
                     i = tmp.ptr - trailing.ptr;
                 }
                 else
@@ -1047,6 +1044,8 @@ struct FormatSpec(Char)
     //--------------------------------------------------------------------------
     private bool readUpToNextSpec(R)(ref R r)
     {
+        import std.ascii : isLower;
+
         // Reset content
         if (__ctfe)
         {
@@ -1110,6 +1109,7 @@ struct FormatSpec(Char)
 
     private string getCurFmtStr() const
     {
+        import std.array : appender;
         auto w = appender!string();
         auto f = FormatSpec!Char("%s"); // for stringnize
 
@@ -1138,6 +1138,7 @@ struct FormatSpec(Char)
     unittest
     {
         // issue 5237
+        import std.array;
         auto w = appender!string();
         auto f = FormatSpec!char("%.16f");
         f.writeUpToNextSpec(w); // dummy eating
@@ -1148,6 +1149,7 @@ struct FormatSpec(Char)
 
     private const(Char)[] headUpToNextSpec()
     {
+        import std.array : appender;
         auto w = appender!(typeof(return))();
         auto tr = trailing;
 
@@ -1192,6 +1194,7 @@ struct FormatSpec(Char)
 @safe pure unittest
 {
     //Test the example
+    import std.array;
     auto a = appender!(string)();
     auto fmt = "Number: %2.4e\nString: %s";
     auto f = FormatSpec!char(fmt);
@@ -1221,6 +1224,7 @@ struct FormatSpec(Char)
   */
 FormatSpec!Char singleSpec(Char)(Char[] fmt)
 {
+    import std.conv : text;
     enforce(fmt.length >= 2, new Exception("fmt must be at least 2 characters long"));
     enforce(fmt.front == '%', new Exception("fmt must start with a '%' character"));
 
@@ -1344,6 +1348,7 @@ if (is(Unqual!T == typeof(null)) && !is(T == enum) && !hasToString!(T, Char))
 void formatValue(Writer, T, Char)(Writer w, T obj, ref FormatSpec!Char f)
 if (is(IntegralTypeOf!T) && !is(T == enum) && !hasToString!(T, Char))
 {
+    import std.system : Endian;
     alias U = IntegralTypeOf!T;
     U val = obj;    // Extracting alias this may be impure/system/may-throw
 
@@ -1572,6 +1577,9 @@ unittest
 void formatValue(Writer, T, Char)(Writer w, T obj, ref FormatSpec!Char f)
 if (is(FloatingPointTypeOf!T) && !is(T == enum) && !hasToString!(T, Char))
 {
+    import core.stdc.stdio : snprintf;
+    import std.system : Endian;
+    import std.algorithm : find, min;
     FormatSpec!Char fs = f; // fs is copy for change its values.
     FloatingPointTypeOf!T val = obj;
 
@@ -1595,11 +1603,12 @@ if (is(FloatingPointTypeOf!T) && !is(T == enum) && !hasToString!(T, Char))
         }
         return;
     }
-    enforceFmt(std.algorithm.find("fgFGaAeEs", fs.spec).length,
+    enforceFmt(find("fgFGaAeEs", fs.spec).length,
         "floating");
 
     version (CRuntime_Microsoft)
     {
+        import std.math : isNaN, isInfinity;
         double tval = val; // convert early to get "inf" in case of overflow
         string s;
         if (isNaN(tval))
@@ -1670,6 +1679,7 @@ if (is(FloatingPointTypeOf!T) && !is(T == enum) && !hasToString!(T, Char))
 
 @safe /*pure */unittest
 {
+    import std.conv : to;
     foreach (T; TypeTuple!(float, double, real))
     {
         formatTest( to!(          T)(5.5), "5.5" );
@@ -1718,6 +1728,7 @@ if (is(Unqual!T : creal) && !is(T == enum) && !hasToString!(T, Char))
 
 /*@safe pure */unittest
 {
+    import std.conv : to;
     foreach (T; TypeTuple!(cfloat, cdouble, creal))
     {
         formatTest( to!(          T)(1 + 1i), "1+1i" );
@@ -1763,6 +1774,7 @@ if (is(Unqual!T : ireal) && !is(T == enum) && !hasToString!(T, Char))
 
 /*@safe pure */unittest
 {
+    import std.conv : to;
     foreach (T; TypeTuple!(ifloat, idouble, ireal))
     {
         formatTest( to!(          T)(1i), "1i" );
@@ -1918,6 +1930,7 @@ if (is(StaticArrayTypeOf!T) && !is(T == enum) && !hasToString!(T, Char))
 
 unittest    // Test for issue 8310
 {
+    import std.array : appender;
     FormatSpec!char f;
     auto w = appender!string();
 
@@ -2139,6 +2152,8 @@ unittest
 private void formatRange(Writer, T, Char)(ref Writer w, ref T val, ref FormatSpec!Char f)
 if (isInputRange!T)
 {
+    import std.conv : text;
+
     // Formatting character ranges like string
     if (f.spec == 's')
     {
@@ -2340,6 +2355,9 @@ private void formatChar(Writer)(Writer w, in dchar c, in char quote)
 void formatElement(Writer, T, Char)(Writer w, T val, ref FormatSpec!Char f)
 if (is(StringTypeOf!T) && !is(T == enum))
 {
+    import std.utf : UTFException;
+    import std.array : appender;
+
     StringTypeOf!T str = val;   // bug 8015
 
     if (f.spec == 's')
@@ -2709,7 +2727,6 @@ if (is(T == class) && !is(T == enum))
 unittest
 {
    import std.format;
-   import std.string : format;
 
    struct Point
    {
@@ -2751,6 +2768,8 @@ unittest
 
 unittest
 {
+    import std.array : appender;
+    import std.range.interfaces;
     // class range (issue 5154)
     auto c = inputRangeObject([1,2,3,4]);
     formatTest( c, "[1, 2, 3, 4]" );
@@ -2851,6 +2870,7 @@ if (is(T == interface) && (hasToString!(T, Char) || !is(BuiltinTypeOf!T)) && !is
 unittest
 {
     // interface
+    import std.range.interfaces;
     InputRange!int i = inputRangeObject([1,2,3,4]);
     formatTest( i, "[1, 2, 3, 4]" );
     assert(i.empty);
@@ -2982,6 +3002,7 @@ unittest
 
 unittest
 {
+    import std.array;
     // 7230
     static struct Bug7230
     {
@@ -3005,6 +3026,7 @@ unittest
 
 unittest
 {
+    import std.array;
     static struct S{ @disable this(this); }
     S s;
 
@@ -3113,6 +3135,7 @@ if (isPointer!T && !is(T == enum) && !hasToString!(T, Char))
 @safe pure unittest
 {
     // pointer
+    import std.range;
     auto r = retro([1,2,3,4]);
     auto p = ()@trusted{ auto p = &r; return p; }();
     formatTest( p, "[4, 3, 2, 1]" );
@@ -3173,21 +3196,32 @@ unittest
 }
 
 /**
-   Delegates are formatted by 'Attributes ReturnType delegate(Parameters)'
+   Delegates are formatted by 'ReturnType delegate(Parameters) FunctionAttributes'
  */
-void formatValue(Writer, T, Char)(Writer w, T val, ref FormatSpec!Char f)
-if (is(T == delegate) && !is(T == enum) && !hasToString!(T, Char))
+void formatValue(Writer, T, Char)(Writer w, scope T, ref FormatSpec!Char f)
+    if (isDelegate!T)
 {
-    alias FA = FunctionAttribute;
-    if (functionAttributes!T & FA.pure_)    formatValue(w, "pure ", f);
-    if (functionAttributes!T & FA.nothrow_) formatValue(w, "nothrow ", f);
-    if (functionAttributes!T & FA.ref_)     formatValue(w, "ref ", f);
-    if (functionAttributes!T & FA.property) formatValue(w, "@property ", f);
-    if (functionAttributes!T & FA.trusted)  formatValue(w, "@trusted ", f);
-    if (functionAttributes!T & FA.safe)     formatValue(w, "@safe ", f);
-    formatValue(w, ReturnType!T.stringof, f);
-    formatValue(w, " delegate", f);
-    formatValue(w, ParameterTypeTuple!T.stringof, f);
+    formatValue(w, T.stringof, f);
+}
+
+///
+unittest
+{
+    import std.conv : to;
+
+    int i;
+    
+    int foo(short k) @nogc
+    {
+        return i + k;
+    }
+    
+    int delegate(short) @nogc bar() nothrow
+    {
+        return &foo; 
+    }
+
+    assert(to!string(&bar) == "int delegate(short) @nogc delegate() nothrow");
 }
 
 unittest
@@ -3209,6 +3243,7 @@ private void formatGeneric(Writer, D, Char)(Writer w, const(void)* arg, ref Form
 
 private void formatNth(Writer, Char, A...)(Writer w, ref FormatSpec!Char f, size_t index, A args)
 {
+    import std.conv : to;
     static string gencode(size_t count)()
     {
         string result;
@@ -3249,6 +3284,7 @@ unittest
 // Fix for issue 1591
 private int getNthInt(A...)(uint index, A args)
 {
+    import std.conv : to;
     static if (A.length)
     {
         if (index)
@@ -3275,6 +3311,9 @@ private int getNthInt(A...)(uint index, A args)
 version(unittest)
 void formatTest(T)(T val, string expected, size_t ln = __LINE__, string fn = __FILE__)
 {
+    import core.exception;
+    import std.array : appender;
+    import std.conv : text;
     FormatSpec!char f;
     auto w = appender!string();
     formatValue(w, val, f);
@@ -3286,6 +3325,9 @@ void formatTest(T)(T val, string expected, size_t ln = __LINE__, string fn = __F
 version(unittest)
 void formatTest(T)(string fmt, T val, string expected, size_t ln = __LINE__, string fn = __FILE__)
 {
+    import core.exception;
+    import std.array : appender;
+    import std.conv : text;
     auto w = appender!string();
     formattedWrite(w, fmt, val);
     enforce!AssertError(
@@ -3296,6 +3338,9 @@ void formatTest(T)(string fmt, T val, string expected, size_t ln = __LINE__, str
 version(unittest)
 void formatTest(T)(T val, string[] expected, size_t ln = __LINE__, string fn = __FILE__)
 {
+    import core.exception;
+    import std.conv : text;
+    import std.array : appender;
     FormatSpec!char f;
     auto w = appender!string();
     formatValue(w, val, f);
@@ -3311,6 +3356,9 @@ void formatTest(T)(T val, string[] expected, size_t ln = __LINE__, string fn = _
 version(unittest)
 void formatTest(T)(string fmt, T val, string[] expected, size_t ln = __LINE__, string fn = __FILE__)
 {
+    import core.exception;
+    import std.conv : text;
+    import std.array : appender;
     auto w = appender!string();
     formattedWrite(w, fmt, val);
     foreach(cur; expected)
@@ -3324,6 +3372,8 @@ void formatTest(T)(string fmt, T val, string[] expected, size_t ln = __LINE__, s
 
 unittest
 {
+    import std.algorithm;
+    import std.array;
     auto stream = appender!string();
     formattedWrite(stream, "%s", 1.1);
     assert(stream.data == "1.1", stream.data);
@@ -3341,6 +3391,7 @@ unittest
 
 unittest
 {
+    import std.array;
     auto stream = appender!string();
     formattedWrite(stream, "%u", 42);
     assert(stream.data == "42", stream.data);
@@ -3349,6 +3400,7 @@ unittest
 unittest
 {
     // testing raw writes
+    import std.array;
     auto w = appender!(char[])();
     uint a = 0x02030405;
     formattedWrite(w, "%+r", a);
@@ -3363,6 +3415,7 @@ unittest
 unittest
 {
     // testing positional parameters
+    import std.array;
     auto w = appender!(char[])();
     formattedWrite(w,
             "Numbers %2$s and %1$s are reversed and %1$s%2$s repeated",
@@ -3379,6 +3432,9 @@ unittest
 
 unittest
 {
+    import std.conv : text, octal;
+    import std.array;
+
     debug(format) printf("std.format.format.unittest\n");
 
     auto stream = appender!(char[])();
@@ -3846,6 +3902,9 @@ here:
 
 unittest
 {
+    import std.array;
+    import std.stdio;
+
     immutable(char[5])[int] aa = ([3:"hello", 4:"betty"]);
     if (false) writeln(aa.keys);
     assert(aa[3] == "hello");
@@ -3877,11 +3936,11 @@ unittest
         assert(stream.data == "1");
     }
 
-    //auto r = std.string.format("%s", aa.values);
+    //auto r = format("%s", aa.values);
     stream.clear(); formattedWrite(stream, "%s", aa);
     //assert(stream.data == "[3:[h,e,l,l,o],4:[b,e,t,t,y]]", stream.data);
-//    r = std.string.format("%s", aa);
-//   assert(r == "[3:[h,e,l,l,o],4:[b,e,t,t,y]]");
+    //r = format("%s", aa);
+    //assert(r == "[3:[h,e,l,l,o],4:[b,e,t,t,y]]");
 }
 
 unittest
@@ -3897,6 +3956,8 @@ unittest
 version(unittest)
 void formatReflectTest(T)(ref T val, string fmt, string formatted, string fn = __FILE__, size_t ln = __LINE__)
 {
+    import core.exception;
+    import std.array : appender;
     auto w = appender!string();
     formattedWrite(w, fmt, val);
 
@@ -3937,6 +3998,8 @@ void formatReflectTest(T)(ref T val, string fmt, string formatted, string fn = _
 version(unittest)
 void formatReflectTest(T)(ref T val, string fmt, string[] formatted, string fn = __FILE__, size_t ln = __LINE__)
 {
+    import core.exception;
+    import std.array : appender;
     auto w = appender!string();
     formattedWrite(w, fmt, val);
 
@@ -4080,6 +4143,9 @@ unittest
 //------------------------------------------------------------------------------
 private void skipData(Range, Char)(ref Range input, ref FormatSpec!Char spec)
 {
+    import std.ascii : isDigit;
+    import std.conv : text;
+
     switch (spec.spec)
     {
         case 'c': input.popFront(); break;
@@ -4109,11 +4175,13 @@ private template acceptedSpecs(T)
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range && is(Unqual!T == bool))
 {
+    import std.algorithm : find;
+    import std.conv : parse, text;
     if (spec.spec == 's')
     {
         return parse!T(input);
     }
-    enforce(std.algorithm.find(acceptedSpecs!long, spec.spec).length,
+    enforce(find(acceptedSpecs!long, spec.spec).length,
             text("Wrong unformat specifier '%", spec.spec , "' for ", T.stringof));
 
     return unformatValue!long(input, spec) != 0;
@@ -4164,6 +4232,7 @@ unittest
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range && is(T == typeof(null)))
 {
+    import std.conv : parse, text;
     enforce(spec.spec == 's',
             text("Wrong unformat specifier '%", spec.spec , "' for ", T.stringof));
 
@@ -4176,7 +4245,9 @@ T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range && isIntegral!T && !is(T == enum))
 {
-    enforce(std.algorithm.find(acceptedSpecs!T, spec.spec).length,
+    import std.algorithm : find;    
+    import std.conv : parse, text;
+    enforce(find(acceptedSpecs!T, spec.spec).length,
             text("Wrong unformat specifier '%", spec.spec , "' for ", T.stringof));
 
     enforce(spec.width == 0);   // TODO
@@ -4196,6 +4267,8 @@ T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isFloatingPoint!T && !is(T == enum))
 {
+    import std.algorithm : find;
+    import std.conv : parse, text;
     if (spec.spec == 'r')
     {
         // raw read
@@ -4223,7 +4296,7 @@ T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
         }
         return x.typed;
     }
-    enforce(std.algorithm.find(acceptedSpecs!T, spec.spec).length,
+    enforce(find(acceptedSpecs!T, spec.spec).length,
             text("Wrong unformat specifier '%", spec.spec , "' for ", T.stringof));
 
     return parse!T(input);
@@ -4246,6 +4319,7 @@ version(none)unittest
 
 unittest
 {
+    import std.typecons;
     char[] line = "1 2".dup;
     int a, b;
     formattedRead(line, "%s %s", &a, &b);
@@ -4272,13 +4346,15 @@ unittest
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range && isSomeChar!T && !is(T == enum))
 {
+    import std.algorithm : find;
+    import std.conv : to, text;
     if (spec.spec == 's' || spec.spec == 'c')
     {
         auto result = to!T(input.front);
         input.popFront();
         return result;
     }
-    enforce(std.algorithm.find(acceptedSpecs!T, spec.spec).length,
+    enforce(find(acceptedSpecs!T, spec.spec).length,
             text("Wrong unformat specifier '%", spec.spec , "' for ", T.stringof));
 
     static if (T.sizeof == 1)
@@ -4309,6 +4385,8 @@ unittest
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range && is(StringTypeOf!T) && !isAggregateType!T && !is(T == enum))
 {
+    import std.conv : text;
+
     if (spec.spec == '(')
     {
         return unformatRange!T(input, spec);
@@ -4322,7 +4400,10 @@ T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
         auto app = result[];
     }
     else
+    {
+        import std.array : appender;
         auto app = appender!T();
+    }
     if (spec.trailing.empty)
     {
         for (; !input.empty; input.popFront())
@@ -4385,6 +4466,7 @@ unittest
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range && isArray!T && !is(StringTypeOf!T) && !isAggregateType!T && !is(T == enum))
 {
+    import std.conv : parse, text;
     if (spec.spec == '(')
     {
         return unformatRange!T(input, spec);
@@ -4478,6 +4560,7 @@ unittest
 T unformatValue(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range && isAssociativeArray!T && !is(T == enum))
 {
+    import std.conv : parse, text;
     if (spec.spec == '(')
     {
         return unformatRange!T(input, spec);
@@ -4614,6 +4697,7 @@ body
 T unformatElement(T, Range, Char)(ref Range input, ref FormatSpec!Char spec)
     if (isInputRange!Range)
 {
+    import std.conv : parseElement;
     static if (isSomeString!T)
     {
         if (spec.spec == 's')
@@ -4977,8 +5061,13 @@ void main()
 }
 ------------------------
  */
-void doFormat(void delegate(dchar) putc, TypeInfo[] arguments, va_list argptr)
+void doFormat()(scope void delegate(dchar) putc, TypeInfo[] arguments, va_list argptr)
 {
+    import std.utf : toUCSindex, isValidDchar, UTFException, toUTF8;
+    import core.stdc.string : strlen;
+    import core.stdc.stdlib : alloca;
+    import core.stdc.stdio : snprintf;
+
     TypeInfo ti;
     Mangle m;
     uint flags;
@@ -5134,6 +5223,7 @@ void doFormat(void delegate(dchar) putc, TypeInfo[] arguments, va_list argptr)
                     int n;
                     version (CRuntime_Microsoft)
                     {
+                        import std.math : isNaN, isInfinity;
                         if (isNaN(v)) // snprintf writes 1.#QNAN
                             n = snprintf(fbuf.ptr, sl, "nan");
                         else if(isInfinity(v)) // snprintf writes 1.#INF
@@ -5935,15 +6025,17 @@ void doFormat(void delegate(dchar) putc, TypeInfo[] arguments, va_list argptr)
 
 unittest
 {
+    import std.conv : octal;
+
     int i;
     string s;
 
     debug(format) printf("std.format.format.unittest\n");
 
-    s = std.string.format("hello world! %s %s %s%s%s", true, 57, 1_000_000_000, 'x', " foo");
+    s = format("hello world! %s %s %s%s%s", true, 57, 1_000_000_000, 'x', " foo");
     assert(s == "hello world! true 57 1000000000x foo");
 
-    s = std.string.format("%s %A %s", 1.67, -1.28, float.nan);
+    s = format("%s %A %s", 1.67, -1.28, float.nan);
     /* The host C library is used to format floats.
      * C99 doesn't specify what the hex digit before the decimal point
      * is for %A.
@@ -5967,13 +6059,13 @@ unittest
     else
         assert(s == "1.67 -0X1.47AE147AE147BP+0 nan", s);
 
-    s = std.string.format("%x %X", 0x1234AF, 0xAFAFAFAF);
+    s = format("%x %X", 0x1234AF, 0xAFAFAFAF);
     assert(s == "1234af AFAFAFAF");
 
-    s = std.string.format("%b %o", 0x1234AF, 0xAFAFAFAF);
+    s = format("%b %o", 0x1234AF, 0xAFAFAFAF);
     assert(s == "100100011010010101111 25753727657");
 
-    s = std.string.format("%d %s", 0x1234AF, 0xAFAFAFAF);
+    s = format("%d %s", 0x1234AF, 0xAFAFAFAF);
     assert(s == "1193135 2947526575");
 
     //version(X86_64)
@@ -5982,263 +6074,264 @@ unittest
     //}
     //else
     //{
-        s = std.string.format("%s", 1.2 + 3.4i);
+        s = format("%s", 1.2 + 3.4i);
         assert(s == "1.2+3.4i", s);
 
-        //s = std.string.format("%x %X", 1.32, 6.78f);
+        //s = format("%x %X", 1.32, 6.78f);
         //assert(s == "3ff51eb851eb851f 40D8F5C3");
 
     //}
 
-    s = std.string.format("%#06.*f",2,12.345);
+    s = format("%#06.*f",2,12.345);
     assert(s == "012.35");
 
-    s = std.string.format("%#0*.*f",6,2,12.345);
+    s = format("%#0*.*f",6,2,12.345);
     assert(s == "012.35");
 
-    s = std.string.format("%7.4g:", 12.678);
+    s = format("%7.4g:", 12.678);
     assert(s == "  12.68:");
 
-    s = std.string.format("%7.4g:", 12.678L);
+    s = format("%7.4g:", 12.678L);
     assert(s == "  12.68:");
 
-    s = std.string.format("%04f|%05d|%#05x|%#5x",-4.0,-10,1,1);
+    s = format("%04f|%05d|%#05x|%#5x",-4.0,-10,1,1);
     assert(s == "-4.000000|-0010|0x001|  0x1");
 
     i = -10;
-    s = std.string.format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
+    s = format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
     assert(s == "-10|-10|-10|-10|-10.0000");
 
     i = -5;
-    s = std.string.format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
+    s = format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
     assert(s == "-5| -5|-05|-5|-5.0000");
 
     i = 0;
-    s = std.string.format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
+    s = format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
     assert(s == "0|  0|000|0|0.0000");
 
     i = 5;
-    s = std.string.format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
+    s = format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
     assert(s == "5|  5|005|5|5.0000");
 
     i = 10;
-    s = std.string.format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
+    s = format("%d|%3d|%03d|%1d|%01.4f",i,i,i,i,cast(double) i);
     assert(s == "10| 10|010|10|10.0000");
 
-    s = std.string.format("%.0d", 0);
+    s = format("%.0d", 0);
     assert(s == "");
 
-    s = std.string.format("%.g", .34);
+    s = format("%.g", .34);
     assert(s == "0.3");
 
-    s = std.string.format("%.0g", .34);
+    s = format("%.0g", .34);
     assert(s == "0.3");
 
-    s = std.string.format("%.2g", .34);
+    s = format("%.2g", .34);
     assert(s == "0.34");
 
-    s = std.string.format("%0.0008f", 1e-08);
+    s = format("%0.0008f", 1e-08);
     assert(s == "0.00000001");
 
-    s = std.string.format("%0.0008f", 1e-05);
+    s = format("%0.0008f", 1e-05);
     assert(s == "0.00001000");
 
     s = "helloworld";
     string r;
-    r = std.string.format("%.2s", s[0..5]);
+    r = format("%.2s", s[0..5]);
     assert(r == "he");
-    r = std.string.format("%.20s", s[0..5]);
+    r = format("%.20s", s[0..5]);
     assert(r == "hello");
-    r = std.string.format("%8s", s[0..5]);
+    r = format("%8s", s[0..5]);
     assert(r == "   hello");
 
     byte[] arrbyte = new byte[4];
     arrbyte[0] = 100;
     arrbyte[1] = -99;
     arrbyte[3] = 0;
-    r = std.string.format("%s", arrbyte);
+    r = format("%s", arrbyte);
     assert(r == "[100, -99, 0, 0]");
 
     ubyte[] arrubyte = new ubyte[4];
     arrubyte[0] = 100;
     arrubyte[1] = 200;
     arrubyte[3] = 0;
-    r = std.string.format("%s", arrubyte);
+    r = format("%s", arrubyte);
     assert(r == "[100, 200, 0, 0]");
 
     short[] arrshort = new short[4];
     arrshort[0] = 100;
     arrshort[1] = -999;
     arrshort[3] = 0;
-    r = std.string.format("%s", arrshort);
+    r = format("%s", arrshort);
     assert(r == "[100, -999, 0, 0]");
 
     ushort[] arrushort = new ushort[4];
     arrushort[0] = 100;
     arrushort[1] = 20_000;
     arrushort[3] = 0;
-    r = std.string.format("%s", arrushort);
+    r = format("%s", arrushort);
     assert(r == "[100, 20000, 0, 0]");
 
     int[] arrint = new int[4];
     arrint[0] = 100;
     arrint[1] = -999;
     arrint[3] = 0;
-    r = std.string.format("%s", arrint);
+    r = format("%s", arrint);
     assert(r == "[100, -999, 0, 0]");
 
     long[] arrlong = new long[4];
     arrlong[0] = 100;
     arrlong[1] = -999;
     arrlong[3] = 0;
-    r = std.string.format("%s", arrlong);
+    r = format("%s", arrlong);
     assert(r == "[100, -999, 0, 0]");
 
     ulong[] arrulong = new ulong[4];
     arrulong[0] = 100;
     arrulong[1] = 999;
     arrulong[3] = 0;
-    r = std.string.format("%s", arrulong);
+    r = format("%s", arrulong);
     assert(r == "[100, 999, 0, 0]");
 
     string[] arr2 = new string[4];
     arr2[0] = "hello";
     arr2[1] = "world";
     arr2[3] = "foo";
-    r = std.string.format("%s", arr2);
+    r = format("%s", arr2);
     assert(r == `["hello", "world", "", "foo"]`);
 
-    r = std.string.format("%.8d", 7);
+    r = format("%.8d", 7);
     assert(r == "00000007");
-    r = std.string.format("%.8x", 10);
+    r = format("%.8x", 10);
     assert(r == "0000000a");
 
-    r = std.string.format("%-3d", 7);
+    r = format("%-3d", 7);
     assert(r == "7  ");
 
-    r = std.string.format("%*d", -3, 7);
+    r = format("%*d", -3, 7);
     assert(r == "7  ");
 
-    r = std.string.format("%.*d", -3, 7);
+    r = format("%.*d", -3, 7);
     assert(r == "7");
 
-    r = std.string.format("abc"c);
+    r = format("abc"c);
     assert(r == "abc");
-    r = std.string.format("def"w);
+    r = format("def"w);
     assert(r == "def");
-    r = std.string.format("ghi"d);
+    r = format("ghi"d);
     assert(r == "ghi");
 
     void* p = cast(void*)0xDEADBEEF;
-    r = std.string.format("%s", p);
+    r = format("%s", p);
     assert(r == "DEADBEEF");
 
-    r = std.string.format("%#x", 0xabcd);
+    r = format("%#x", 0xabcd);
     assert(r == "0xabcd");
-    r = std.string.format("%#X", 0xABCD);
+    r = format("%#X", 0xABCD);
     assert(r == "0XABCD");
 
-    r = std.string.format("%#o", octal!12345);
+    r = format("%#o", octal!12345);
     assert(r == "012345");
-    r = std.string.format("%o", 9);
+    r = format("%o", 9);
     assert(r == "11");
 
-    r = std.string.format("%+d", 123);
+    r = format("%+d", 123);
     assert(r == "+123");
-    r = std.string.format("%+d", -123);
+    r = format("%+d", -123);
     assert(r == "-123");
-    r = std.string.format("% d", 123);
+    r = format("% d", 123);
     assert(r == " 123");
-    r = std.string.format("% d", -123);
+    r = format("% d", -123);
     assert(r == "-123");
 
-    r = std.string.format("%%");
+    r = format("%%");
     assert(r == "%");
 
-    r = std.string.format("%d", true);
+    r = format("%d", true);
     assert(r == "1");
-    r = std.string.format("%d", false);
+    r = format("%d", false);
     assert(r == "0");
 
-    r = std.string.format("%d", 'a');
+    r = format("%d", 'a');
     assert(r == "97");
     wchar wc = 'a';
-    r = std.string.format("%d", wc);
+    r = format("%d", wc);
     assert(r == "97");
     dchar dc = 'a';
-    r = std.string.format("%d", dc);
+    r = format("%d", dc);
     assert(r == "97");
 
     byte b = byte.max;
-    r = std.string.format("%x", b);
+    r = format("%x", b);
     assert(r == "7f");
-    r = std.string.format("%x", ++b);
+    r = format("%x", ++b);
     assert(r == "80");
-    r = std.string.format("%x", ++b);
+    r = format("%x", ++b);
     assert(r == "81");
 
     short sh = short.max;
-    r = std.string.format("%x", sh);
+    r = format("%x", sh);
     assert(r == "7fff");
-    r = std.string.format("%x", ++sh);
+    r = format("%x", ++sh);
     assert(r == "8000");
-    r = std.string.format("%x", ++sh);
+    r = format("%x", ++sh);
     assert(r == "8001");
 
     i = int.max;
-    r = std.string.format("%x", i);
+    r = format("%x", i);
     assert(r == "7fffffff");
-    r = std.string.format("%x", ++i);
+    r = format("%x", ++i);
     assert(r == "80000000");
-    r = std.string.format("%x", ++i);
+    r = format("%x", ++i);
     assert(r == "80000001");
 
-    r = std.string.format("%x", 10);
+    r = format("%x", 10);
     assert(r == "a");
-    r = std.string.format("%X", 10);
+    r = format("%X", 10);
     assert(r == "A");
-    r = std.string.format("%x", 15);
+    r = format("%x", 15);
     assert(r == "f");
-    r = std.string.format("%X", 15);
+    r = format("%X", 15);
     assert(r == "F");
 
     Object c = null;
-    r = std.string.format("%s", c);
+    r = format("%s", c);
     assert(r == "null");
 
     enum TestEnum
     {
         Value1, Value2
     }
-    r = std.string.format("%s", TestEnum.Value2);
+    r = format("%s", TestEnum.Value2);
     assert(r == "Value2");
 
     immutable(char[5])[int] aa = ([3:"hello", 4:"betty"]);
-    r = std.string.format("%s", aa.values);
+    r = format("%s", aa.values);
     assert(r == `["hello", "betty"]` || r == `["betty", "hello"]`);
-    r = std.string.format("%s", aa);
+    r = format("%s", aa);
     assert(r == `[3:"hello", 4:"betty"]` || r == `[4:"betty", 3:"hello"]`);
 
     static const dchar[] ds = ['a','b'];
     for (int j = 0; j < ds.length; ++j)
     {
-        r = std.string.format(" %d", ds[j]);
+        r = format(" %d", ds[j]);
         if (j == 0)
             assert(r == " 97");
         else
             assert(r == " 98");
     }
 
-    r = std.string.format(">%14d<, %s", 15, [1,2,3]);
+    r = format(">%14d<, %s", 15, [1,2,3]);
     assert(r == ">            15<, [1, 2, 3]");
 
-    assert(std.string.format("%8s", "bar") == "     bar");
-    assert(std.string.format("%8s", "b\u00e9ll\u00f4") == " b\u00e9ll\u00f4");
+    assert(format("%8s", "bar") == "     bar");
+    assert(format("%8s", "b\u00e9ll\u00f4") == " b\u00e9ll\u00f4");
 }
 
 unittest
 {
     // bugzilla 3479
+    import std.array;
     auto stream = appender!(char[])();
     formattedWrite(stream, "%2$.*1$d", 12, 10);
     assert(stream.data == "000000000010", stream.data);
@@ -6247,8 +6340,159 @@ unittest
 unittest
 {
     // bug 6893
+    import std.array;
     enum E : ulong { A, B, C }
     auto stream = appender!(char[])();
     formattedWrite(stream, "%s", E.C);
     assert(stream.data == "C");
+}
+
+/*****************************************************
+ * Format arguments into a string.
+ *
+ * Params: fmt  = Format string. For detailed specification, see $(XREF format,formattedWrite).
+ *         args = Variadic list of arguments to format into returned string.
+ */
+string format(Char, Args...)(in Char[] fmt, Args args)
+{
+    import std.format : formattedWrite, FormatException;
+    import std.array : appender;
+    auto w = appender!string();
+    auto n = formattedWrite(w, fmt, args);
+    version (all)
+    {
+        // In the future, this check will be removed to increase consistency
+        // with formattedWrite
+        import std.conv : text;
+        import std.exception : enforce;
+        enforce(n == args.length, new FormatException(
+            text("Orphan format arguments: args[", n, "..", args.length, "]")));
+    }
+    return w.data;
+}
+
+unittest
+{
+    import std.format;
+    import core.exception;
+    import std.exception;
+    assertCTFEable!(
+    {
+//  assert(format(null) == "");
+    assert(format("foo") == "foo");
+    assert(format("foo%%") == "foo%");
+    assert(format("foo%s", 'C') == "fooC");
+    assert(format("%s foo", "bar") == "bar foo");
+    assert(format("%s foo %s", "bar", "abc") == "bar foo abc");
+    assert(format("foo %d", -123) == "foo -123");
+    assert(format("foo %d", 123) == "foo 123");
+
+    assertThrown!FormatException(format("foo %s"));
+    assertThrown!FormatException(format("foo %s", 123, 456));
+
+    assert(format("hel%slo%s%s%s", "world", -138, 'c', true) ==
+                  "helworldlo-138ctrue");
+    });
+}
+
+/*****************************************************
+ * Format arguments into buffer <i>buf</i> which must be large
+ * enough to hold the result. Throws RangeError if it is not.
+ * Returns: The slice of $(D buf) containing the formatted string.
+ *
+ *  $(RED sformat's current implementation has been replaced with $(LREF xsformat)'s
+ *        implementation. in November 2012.
+ *        This is seamless for most code, but it makes it so that the only
+ *        argument that can be a format string is the first one, so any
+ *        code which used multiple format strings has broken. Please change
+ *        your calls to sformat accordingly.
+ *
+ *        e.g.:
+ *        ----
+ *        sformat(buf, "key = %s", key, ", value = %s", value)
+ *        ----
+ *        needs to be rewritten as:
+ *        ----
+ *        sformat(buf, "key = %s, value = %s", key, value)
+ *        ----
+ *   )
+ */
+char[] sformat(Char, Args...)(char[] buf, in Char[] fmt, Args args)
+{
+    import core.exception : onRangeError;
+    import std.utf : encode;
+    import std.format : formattedWrite, FormatException;
+
+    size_t i;
+
+    struct Sink
+    {
+        void put(dchar c)
+        {
+            char[4] enc;
+            auto n = encode(enc, c);
+
+            if (buf.length < i + n)
+                onRangeError("std.string.sformat", 0);
+
+            buf[i .. i + n] = enc[0 .. n];
+            i += n;
+        }
+        void put(const(char)[] s)
+        {
+            if (buf.length < i + s.length)
+                onRangeError("std.string.sformat", 0);
+
+            buf[i .. i + s.length] = s[];
+            i += s.length;
+        }
+        void put(const(wchar)[] s)
+        {
+            for (; !s.empty; s.popFront())
+                put(s.front);
+        }
+        void put(const(dchar)[] s)
+        {
+            for (; !s.empty; s.popFront())
+                put(s.front);
+        }
+    }
+    auto n = formattedWrite(Sink(), fmt, args);
+    version (all)
+    {
+        // In the future, this check will be removed to increase consistency
+        // with formattedWrite
+        import std.conv : text;
+        import std.exception : enforce;
+        enforce(n == args.length, new FormatException(
+            text("Orphan format arguments: args[", n, "..", args.length, "]")));
+    }
+    return buf[0 .. i];
+}
+
+unittest
+{
+    import core.exception;
+    import std.format;
+
+    debug(string) trustedPrintf("std.string.sformat.unittest\n");
+
+    import std.exception;
+    assertCTFEable!(
+    {
+    char[10] buf;
+
+    assert(sformat(buf[], "foo") == "foo");
+    assert(sformat(buf[], "foo%%") == "foo%");
+    assert(sformat(buf[], "foo%s", 'C') == "fooC");
+    assert(sformat(buf[], "%s foo", "bar") == "bar foo");
+    assertThrown!RangeError(sformat(buf[], "%s foo %s", "bar", "abc"));
+    assert(sformat(buf[], "foo %d", -123) == "foo -123");
+    assert(sformat(buf[], "foo %d", 123) == "foo 123");
+
+    assertThrown!FormatException(sformat(buf[], "foo %s"));
+    assertThrown!FormatException(sformat(buf[], "foo %s", 123, 456));
+
+    assert(sformat(buf[], "%s %s %s", "c"c, "w"w, "d"d) == "c w d");
+    });
 }

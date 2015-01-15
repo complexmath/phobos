@@ -1,62 +1,61 @@
 // Written in the D programming language.
 
 /**
- * Templates with which to extract information about types and symbols at
- * compile time.
+ * Templates which extract information about types and symbols at compile time.
  *
  * <script type="text/javascript">inhibitQuickIndex = 1</script>
  *
  * $(BOOKTABLE ,
  * $(TR $(TH Category) $(TH Templates))
  * $(TR $(TD Symbol Name _traits) $(TD
- *           $(LREF packageName)
- *           $(LREF moduleName)
  *           $(LREF fullyQualifiedName)
+ *           $(LREF moduleName)
+ *           $(LREF packageName)
  * ))
  * $(TR $(TD Function _traits) $(TD
- *           $(LREF ReturnType)
- *           $(LREF ParameterTypeTuple)
  *           $(LREF arity)
- *           $(LREF ParameterStorageClassTuple)
- *           $(LREF ParameterIdentifierTuple)
- *           $(LREF ParameterDefaultValueTuple)
  *           $(LREF functionAttributes)
+ *           $(LREF functionLinkage)
+ *           $(LREF FunctionTypeOf)
  *           $(LREF isSafe)
  *           $(LREF isUnsafe)
- *           $(LREF functionLinkage)
- *           $(LREF variadicFunctionStyle)
- *           $(LREF FunctionTypeOf)
+ *           $(LREF ParameterDefaultValueTuple)
+ *           $(LREF ParameterIdentifierTuple)
+ *           $(LREF ParameterStorageClassTuple)
+ *           $(LREF ParameterTypeTuple)
+ *           $(LREF ReturnType)
  *           $(LREF SetFunctionAttributes)
+ *           $(LREF variadicFunctionStyle)
  * ))
  * $(TR $(TD Aggregate Type _traits) $(TD
- *           $(LREF isNested)
- *           $(LREF hasNested)
- *           $(LREF FieldTypeTuple)
- *           $(LREF FieldNameTuple)
- *           $(LREF RepresentationTypeTuple)
- *           $(LREF hasAliasing)
- *           $(LREF hasIndirections)
- *           $(LREF hasUnsharedAliasing)
- *           $(LREF hasElaborateCopyConstructor)
- *           $(LREF hasElaborateAssign)
- *           $(LREF hasElaborateDestructor)
- *           $(LREF hasMember)
- *           $(LREF EnumMembers)
- *           $(LREF BaseTypeTuple)
  *           $(LREF BaseClassesTuple)
- *           $(LREF InterfacesTuple)
- *           $(LREF TransitiveBaseTypeTuple)
- *           $(LREF MemberFunctionsTuple)
- *           $(LREF TemplateOf)
- *           $(LREF TemplateArgsOf)
+ *           $(LREF BaseTypeTuple)
  *           $(LREF classInstanceAlignment)
+ *           $(LREF EnumMembers)
+ *           $(LREF FieldNameTuple)
+ *           $(LREF FieldTypeTuple)
+ *           $(LREF hasAliasing)
+ *           $(LREF hasElaborateAssign)
+ *           $(LREF hasElaborateCopyConstructor)
+ *           $(LREF hasElaborateDestructor)
+ *           $(LREF hasIndirections)
+ *           $(LREF hasMember)
+ *           $(LREF hasNested)
+ *           $(LREF hasUnsharedAliasing)
+ *           $(LREF InterfacesTuple)
+ *           $(LREF isNested)
+ *           $(LREF MemberFunctionsTuple)
+ *           $(LREF RepresentationTypeTuple)
+ *           $(LREF TemplateArgsOf)
+ *           $(LREF TemplateOf)
+ *           $(LREF TransitiveBaseTypeTuple)
  * ))
  * $(TR $(TD Type Conversion) $(TD
  *           $(LREF CommonType)
  *           $(LREF ImplicitConversionTargets)
- *           $(LREF isImplicitlyConvertible)
  *           $(LREF isAssignable)
  *           $(LREF isCovariantWith)
+ *           $(LREF isImplicitlyConvertible)
  * ))
  * <!--$(TR $(TD SomethingTypeOf) $(TD
  *           $(LREF BooleanTypeOf)
@@ -73,53 +72,52 @@
  *           $(LREF AssocArrayTypeOf)
  *           $(LREF BuiltinTypeOf)
  * ))-->
- * $(TR $(TD IsSomething) $(TD
- *           $(LREF isBoolean)
- *           $(LREF isIntegral)
- *           $(LREF isFloatingPoint)
- *           $(LREF isNumeric)
- *           $(LREF isScalarType)
+ * $(TR $(TD Categories of types) $(TD
+ *           $(LREF isAggregateType)
+ *           $(LREF isArray)
+ *           $(LREF isAssociativeArray)
  *           $(LREF isBasicType)
- *           $(LREF isUnsigned)
+ *           $(LREF isBoolean)
+ *           $(LREF isBuiltinType)
+ *           $(LREF isDynamicArray)
+ *           $(LREF isFloatingPoint)
+ *           $(LREF isIntegral)
+ *           $(LREF isNarrowString)
+ *           $(LREF isNumeric)
+ *           $(LREF isPointer)
+ *           $(LREF isScalarType)
  *           $(LREF isSigned)
  *           $(LREF isSomeChar)
  *           $(LREF isSomeString)
- *           $(LREF isNarrowString)
  *           $(LREF isStaticArray)
- *           $(LREF isDynamicArray)
- *           $(LREF isArray)
- *           $(LREF isAssociativeArray)
- *           $(LREF isBuiltinType)
- *           $(LREF isPointer)
- *           $(LREF isAggregateType)
+ *           $(LREF isUnsigned)
  * ))
- * $(TR $(TD xxx) $(TD
+ * $(TR $(TD Type behaviours) $(TD
+ *           $(LREF isAbstractClass)
+ *           $(LREF isAbstractFunction)
+ *           $(LREF isCallable)
+ *           $(LREF isDelegate)
+ *           $(LREF isExpressionTuple)
+ *           $(LREF isFinalClass)
+ *           $(LREF isFinalFunction)
+ *           $(LREF isFunctionPointer)
+ *           $(LREF isInstanceOf)
  *           $(LREF isIterable)
  *           $(LREF isMutable)
- *           $(LREF isInstanceOf)
- *           $(LREF isExpressionTuple)
- *           $(LREF isTypeTuple)
- *           $(LREF isFunctionPointer)
- *           $(LREF isDelegate)
  *           $(LREF isSomeFunction)
- *           $(LREF isCallable)
- *           $(LREF isAbstractFunction)
- *           $(LREF isFinalFunction)
- *           $(LREF isAbstractClass)
- *           $(LREF isFinalClass)
+ *           $(LREF isTypeTuple)
  * ))
  * $(TR $(TD General Types) $(TD
- *           $(LREF Unqual)
  *           $(LREF ForeachType)
+ *           $(LREF KeyType)
+ *           $(LREF Largest)
+ *           $(LREF mostNegative)
  *           $(LREF OriginalType)
  *           $(LREF PointerTarget)
- *           $(LREF KeyType)
- *           $(LREF ValueType)
- *           $(LREF Unsigned)
- *           $(LREF Largest)
  *           $(LREF Signed)
- *           $(LREF unsigned)
- *           $(LREF mostNegative)
+ *           $(LREF Unqual)
+ *           $(LREF Unsigned)
+ *           $(LREF ValueType)
  * ))
  * $(TR $(TD Misc) $(TD
  *           $(LREF mangledName)
@@ -149,10 +147,8 @@
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
 module std.traits;
-import std.typetuple;
 
-// FIXME @@@bug@@@ 12961
-import std.conv;
+import std.typetuple;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Functions
@@ -538,7 +534,7 @@ unittest
 private template fqnType(T,
     bool alreadyConst, bool alreadyImmutable, bool alreadyShared, bool alreadyInout)
 {
-    import std.string;
+    import std.format : format;
 
     // Convenience tags
     enum {
@@ -565,8 +561,6 @@ private template fqnType(T,
 
     string parametersTypeString(T)() @property
     {
-        import std.array, std.algorithm, std.range;
-
         alias parameters   = ParameterTypeTuple!(T);
         alias parameterStC = ParameterStorageClassTuple!(T);
 
@@ -584,6 +578,9 @@ private template fqnType(T,
 
         static if (parameters.length)
         {
+            import std.algorithm : map;
+            import std.range : join, zip;
+
             string result = join(
                 map!(a => format("%s%s", a[0], a[1]))(
                     zip([staticMap!(storageClassesString, parameterStC)],
@@ -743,7 +740,7 @@ private template fqnType(T,
 
 unittest
 {
-    import std.string : format;
+    import std.format : format;
     alias fqn = fullyQualifiedName;
 
     // Verify those 2 are the same for simple case
@@ -1990,7 +1987,7 @@ unittest
         typeof(&dstyle), typeof(&typesafe)))
     {
         foreach (T; TypeTuple!(BaseT, FunctionTypeOf!BaseT))
-        {
+        (){ // avoid slow optimizations for large functions @@@BUG@@@ 2396
             enum linkage = functionLinkage!T;
             enum attrs = functionAttributes!T;
 
@@ -2023,7 +2020,7 @@ unittest
             // Strip all attributes again.
             alias T3 = SetFunctionAttributes!(T2, functionLinkage!T, FA.none);
             static assert(is(T3 == T));
-        }
+        }();
     }
 }
 
@@ -3011,11 +3008,6 @@ unittest //12000
 
     A!int dummy;
 }
-
-//Explicitly undocumented. They will be removed in December 2014.
-deprecated("Please use hasLocalAliasing instead.")    alias hasLocalAliasing    = hasUnsharedAliasing;
-deprecated("Please use hasRawLocalAliasing instead.") alias hasRawLocalAliasing = hasRawUnsharedAliasing;
-deprecated("Please use hasLocalObjects instead.")     alias hasLocalObjects     = hasUnsharedObjects;
 
 /**
 Returns $(D true) if and only if $(D T)'s representation includes at
@@ -5613,7 +5605,9 @@ unittest
 
 /**
  * Check whether the tuple T is an expression tuple.
- * An expression tuple only contains expressions. See also $(LREF isTypeTuple).
+ * An expression tuple only contains expressions.
+ *
+ * See_Also: $(LREF isTypeTuple).
  */
 template isExpressionTuple(T ...)
 {
@@ -5658,7 +5652,9 @@ unittest
 
 /**
  * Check whether the tuple $(D T) is a type tuple.
- * A type tuple only contains types. See also $(LREF isExpressionTuple).
+ * A type tuple only contains types.
+ *
+ * See_Also: $(LREF isExpressionTuple).
  */
 template isTypeTuple(T...)
 {

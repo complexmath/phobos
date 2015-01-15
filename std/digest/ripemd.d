@@ -1,4 +1,7 @@
 /**
+ * Computes RIPEMD-160 hashes of arbitrary data. RIPEMD-160 hashes are 20 byte quantities
+ * that are like a checksum or CRC, but are more robust.
+ *
 <script type="text/javascript">inhibitQuickIndex = 1</script>
 
 $(BOOKTABLE ,
@@ -13,9 +16,6 @@ $(TR $(TDNW Helpers) $(TD $(MYREF ripemd160Of))
 )
 )
 
- * Computes RIPEMD-160 hashes of arbitrary data. RIPEMD-160 hashes are 20 byte quantities
- * that are like a checksum or CRC, but are more robust.
- *
  * This module conforms to the APIs defined in $(D std.digest.digest). To understand the
  * differences between the template and the OOP API, see $(D std.digest.digest).
  *
@@ -42,12 +42,9 @@ $(TR $(TDNW Helpers) $(TD $(MYREF ripemd160Of))
  *
  * Macros:
  * WIKI = Phobos/StdRipemd
- * MYREF = <font face='Consolas, "Bitstream Vera Sans Mono", "Andale Mono", Monaco, "DejaVu Sans Mono", "Lucida Console", monospace'><a href="#$1">$1</a>&nbsp;</font>
  */
 
 module std.digest.ripemd;
-
-import std.bitmanip, std.exception, std.string;
 
 public import std.digest.digest;
 
@@ -528,6 +525,8 @@ struct RIPEMD160
          */
         ubyte[20] finish() @trusted pure nothrow @nogc
         {
+            import std.bitmanip : nativeToLittleEndian;
+
             ubyte[20] data = void;
             ubyte[8] bits = void;
             uint index, padLen;

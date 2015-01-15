@@ -1,4 +1,11 @@
 /**
+ * A $(LINK2 http://en.wikipedia.org/wiki/Universally_unique_identifier, UUID), or
+ * $(LINK2 http://en.wikipedia.org/wiki/Universally_unique_identifier, Universally unique identifier),
+ * is intended to uniquely identify information in a distributed environment
+ * without significant central coordination. It can be
+ * used to tag objects with very short lifetimes, or to reliably identify very
+ * persistent objects across a network.
+ *
 <script type="text/javascript">inhibitQuickIndex = 1</script>
 
 $(BOOKTABLE ,
@@ -19,13 +26,6 @@ $(MYREF oidNamespace) $(MYREF x500Namespace) )
 )
 )
 
- * A $(LINK2 http://en.wikipedia.org/wiki/Universally_unique_identifier, UUID), or
- * $(LINK2 http://en.wikipedia.org/wiki/Universally_unique_identifier, Universally unique identifier),
- * is intended to uniquely identify information in a distributed environment
- * without significant central coordination. It can be
- * used to tag objects with very short lifetimes, or to reliably identify very
- * persistent objects across a network.
- *
  * UUIDs have many applications. Some examples follow: Databases may use UUIDs to identify
  * rows or records in order to ensure that they are unique across different
  * databases, or for publication/subscription services. Network messages may be
@@ -88,7 +88,6 @@ $(MYREF oidNamespace) $(MYREF x500Namespace) )
  * Source:    $(PHOBOSSRC std/_uuid.d)
  *
  * Macros:
- * MYREF = <font face='Consolas, "Bitstream Vera Sans Mono", "Andale Mono", Monaco, "DejaVu Sans Mono", "Lucida Console", monospace'><a href="#$1">$1</a>&nbsp;</font>
  * MYREF2 = <font face='Consolas, "Bitstream Vera Sans Mono", "Andale Mono", Monaco, "DejaVu Sans Mono", "Lucida Console", monospace'><a href="#$2">$1</a>&nbsp;</font>
  * MYREF3 = <a href="#$2">$(D $1)</a>
  */
@@ -99,8 +98,8 @@ $(MYREF oidNamespace) $(MYREF x500Namespace) )
  */
 module std.uuid;
 
-import std.array, std.ascii;
-import std.conv, std.digest.md, std.digest.sha, std.random, std.range, std.string, std.traits;
+import std.range.primitives;
+import std.traits;
 
 /**
  *
@@ -235,12 +234,12 @@ public struct UUID
          * Construct a UUID struct from the 16 byte representation
          * of a UUID.
          */
-        @safe pure nothrow this(ref in ubyte[16] uuidData)
+        @safe pure nothrow @nogc this(ref in ubyte[16] uuidData)
         {
             data = uuidData;
         }
         /// ditto
-        @safe pure nothrow this(in ubyte[16] uuidData)
+        @safe pure nothrow @nogc this(in ubyte[16] uuidData)
         {
             data = uuidData;
         }
@@ -330,6 +329,7 @@ public struct UUID
          */
         this(T)(in T[] uuid) if(isSomeChar!(Unqual!T))
         {
+            import std.conv : to, parse;
             if(uuid.length < 36)
             {
                 throw new UUIDParsingException(to!string(uuid), 0,
@@ -390,6 +390,7 @@ public struct UUID
         {
             import std.exception;
             import std.typetuple;
+            import std.conv : to;
 
             foreach(S; TypeTuple!(char[], const(char)[], immutable(char)[],
                                   wchar[], const(wchar)[], immutable(wchar)[],
@@ -447,7 +448,7 @@ public struct UUID
          * Returns true if and only if the UUID is equal
          * to {00000000-0000-0000-0000-000000000000}
          */
-        @trusted pure nothrow @property bool empty() const
+        @trusted pure nothrow @nogc @property bool empty() const
         {
             if(__ctfe)
                 return data == (ubyte[16]).init;
@@ -510,7 +511,7 @@ public struct UUID
          * See_Also:
          * $(MYREF3 UUID.Variant, Variant)
          */
-        @safe pure nothrow @property Variant variant() const
+        @safe pure nothrow @nogc @property Variant variant() const
         {
             //variant is stored in octet 7
             //which is index 8, since indexes count backwards
@@ -570,7 +571,7 @@ public struct UUID
          * See_Also:
          * $(MYREF3 UUID.Version, Version)
          */
-        @safe pure nothrow @property Version uuidVersion() const
+        @safe pure nothrow @nogc @property Version uuidVersion() const
         {
             //version is stored in octet 9
             //which is index 6, since indexes count backwards
@@ -625,7 +626,7 @@ public struct UUID
         /**
          * Swap the data of this UUID with the data of rhs.
          */
-        @safe pure nothrow void swap(ref UUID rhs)
+        @safe pure nothrow @nogc void swap(ref UUID rhs)
         {
             auto bck = data;
             data = rhs.data;
@@ -668,7 +669,7 @@ public struct UUID
          * sort(ids);
          * -------------------------
          */
-        @safe pure nothrow bool opEquals(in UUID s) const
+        @safe pure nothrow @nogc bool opEquals(in UUID s) const
         {
             return s.data == this.data;
         }
@@ -676,7 +677,7 @@ public struct UUID
         /**
          * ditto
          */
-        @safe pure nothrow bool opEquals(ref in UUID s) const
+        @safe pure nothrow @nogc bool opEquals(ref in UUID s) const
         {
             return s.data == this.data;
         }
@@ -684,23 +685,25 @@ public struct UUID
         /**
          * ditto
          */
-        @safe pure nothrow int opCmp(in UUID s) const
+        @safe pure nothrow @nogc int opCmp(in UUID s) const
         {
+            import std.algorithm : cmp;
             return cmp(this.data[], s.data[]);
         }
 
         /**
          * ditto
          */
-        @safe pure nothrow int opCmp(ref in UUID s) const
+        @safe pure nothrow @nogc int opCmp(ref in UUID s) const
         {
+            import std.algorithm : cmp;
             return cmp(this.data[], s.data[]);
         }
 
         /**
          * ditto
          */
-        @safe pure nothrow size_t toHash() const
+        @safe pure nothrow @nogc size_t toHash() const
         {
             size_t seed = 0;
             foreach(entry; this.data)
@@ -772,11 +775,7 @@ public struct UUID
         ///ditto
         @safe pure nothrow string toString() const
         {
-            //@@@BUG@@@ workaround for bugzilla 5700
-            try
-                return _toString().idup;
-            catch(Exception)
-                assert(0, "It should be impossible for idup to throw.");
+            return _toString().idup;
         }
 
         ///
@@ -847,7 +846,7 @@ public struct UUID
  * for strings and wstrings. It's always possible to pass wstrings and dstrings
  * by using the ubyte[] function overload (but be aware of endianness issues!).
  */
-@safe pure UUID md5UUID(const(char[]) name, const UUID namespace = UUID.init)
+@safe pure nothrow @nogc UUID md5UUID(const(char[]) name, const UUID namespace = UUID.init)
 {
     return md5UUID(cast(const(ubyte[]))name, namespace);
 }
@@ -855,8 +854,10 @@ public struct UUID
 /**
  * ditto
  */
-@safe pure UUID md5UUID(const(ubyte[]) data, const UUID namespace = UUID.init)
+@safe pure nothrow @nogc UUID md5UUID(const(ubyte[]) data, const UUID namespace = UUID.init)
 {
+    import std.digest.md : MD5;
+
     MD5 hash;
     hash.start();
 
@@ -957,7 +958,7 @@ public struct UUID
  * for strings and wstrings. It's always possible to pass wstrings and dstrings
  * by using the ubyte[] function overload (but be aware of endianness issues!).
  */
-@safe pure UUID sha1UUID(in char[] name, const UUID namespace = UUID.init)
+@safe pure nothrow @nogc UUID sha1UUID(in char[] name, const UUID namespace = UUID.init)
 {
     return sha1UUID(cast(const(ubyte[]))name, namespace);
 }
@@ -965,8 +966,10 @@ public struct UUID
 /**
  * ditto
  */
-@safe pure UUID sha1UUID(in ubyte[] data, const UUID namespace = UUID.init)
+@safe pure nothrow @nogc UUID sha1UUID(in ubyte[] data, const UUID namespace = UUID.init)
 {
+    import std.digest.sha : SHA1;
+
     SHA1 sha;
     sha.start();
 
@@ -1045,26 +1048,26 @@ public struct UUID
  */
 @trusted UUID randomUUID()
 {
+    import std.random : rndGen, Mt19937;
     return randomUUID(rndGen);
 }
-/*
- * Original boost.uuid used Mt19937, we don't want
- * to use anything worse than that. If Random is changed
- * to something else, this assert and the randomUUID function
- * have to be updated.
- */
-static assert(is(typeof(rndGen) == Mt19937));
 
 /**
  * ditto
  */
-@trusted UUID randomUUID(RNG)(ref RNG randomGen) if(isUniformRNG!(RNG) &&
-    isIntegral!(typeof(RNG.front)))
+/**
+ * Params:
+ *      randomGen = uniform RNG
+ * See_Also: $(XREF random, isUniformRNG)
+ */
+@trusted UUID randomUUID(RNG)(ref RNG randomGen) if(isIntegral!(typeof(RNG.front)))
 {
+    import std.random : isUniformRNG;
+    static assert(isUniformRNG!RNG, "randomGen must be an uniform RNG");
     enum size_t elemSize = typeof(RNG.front).sizeof;
     static assert(elemSize <= 16);
     UUID u;
-    foreach(size_t i; iota(cast(size_t)0, cast(size_t)16, elemSize))
+    for(size_t i; i < 16; i += elemSize)
     {
         randomGen.popFront();
         immutable randomValue = randomGen.front;
@@ -1084,9 +1087,21 @@ static assert(is(typeof(rndGen) == Mt19937));
     return u;
 }
 
+/*
+ * Original boost.uuid used Mt19937, we don't want
+ * to use anything worse than that. If Random is changed
+ * to something else, this assert and the randomUUID function
+ * have to be updated.
+ */
 unittest
 {
-    import std.random;
+    import std.random : rndGen, Mt19937;
+    static assert(is(typeof(rndGen) == Mt19937));
+}
+
+unittest
+{
+    import std.random : Xorshift192, unpredictableSeed;
     //simple call
     auto uuid = randomUUID();
 
@@ -1158,6 +1173,9 @@ UUID parseUUID(T)(T uuidString) if(isSomeString!T)
 UUID parseUUID(Range)(ref Range uuidRange) if(isInputRange!Range
     && is(Unqual!(ElementType!Range) == dchar))
 {
+    import std.conv : ConvException, parse;
+    import std.ascii : isHexDigit;
+
     static if(isForwardRange!Range)
         auto errorCopy = uuidRange.save;
 
@@ -1166,6 +1184,7 @@ UUID parseUUID(Range)(ref Range uuidRange) if(isInputRange!Range
     {
         static if(isForwardRange!Range)
         {
+            import std.conv : to;
             static if(isInfinite!Range)
             {
                 throw new UUIDParsingException(to!string(take(errorCopy, pos)), pos, reason, message,
@@ -1185,6 +1204,7 @@ UUID parseUUID(Range)(ref Range uuidRange) if(isInputRange!Range
 
     static if(hasLength!Range)
     {
+        import std.conv : to;
         if(uuidRange.length < 32)
         {
             throw new UUIDParsingException(to!string(uuidRange), 0, UUIDParsingException.Reason.tooLittle,
@@ -1296,6 +1316,7 @@ UUID parseUUID(Range)(ref Range uuidRange) if(isInputRange!Range
 {
     import std.exception;
     import std.typetuple;
+    import std.conv : to;
 
     struct TestRange(bool forward)
     {
@@ -1538,6 +1559,8 @@ public class UUIDParsingException : Exception
     private this(string input, size_t pos, Reason why = Reason.unknown, string msg = "",
         Throwable next = null, string file = __FILE__, size_t line = __LINE__) pure @trusted
     {
+        import std.array : replace;
+        import std.format : format;
         this.input = input;
         this.position = pos;
         this.reason = why;

@@ -53,7 +53,11 @@ ifeq (,$(OS))
 endif
 
 ifeq (,$(MODEL))
-    uname_M:=$(shell uname -m)
+    ifeq ($(OS),solaris)
+        uname_M:=$(shell isainfo -n)
+    else
+        uname_M:=$(shell uname -m)
+    endif
     ifneq (,$(findstring $(uname_M),x86_64 amd64))
         MODEL:=64
     endif
@@ -87,17 +91,20 @@ DOCSRC = ../dlang.org
 WEBSITE_DIR = ../web
 DOC_OUTPUT_DIR = $(WEBSITE_DIR)/phobos-prerelease
 BIGDOC_OUTPUT_DIR = /tmp
-SRC_DOCUMENTABLES = index.d $(addsuffix .d,$(STD_MODULES) $(STD_NET_MODULES) $(STD_DIGEST_MODULES) $(STD_CONTAINER_MODULES) $(EXTRA_DOCUMENTABLES))
-STDDOC = $(DOCSRC)/std.ddoc
-BIGSTDDOC = $(DOCSRC)/std_consolidated.ddoc
+SRC_DOCUMENTABLES = index.d $(addsuffix .d,$(STD_MODULES) $(STD_NET_MODULES) $(STD_DIGEST_MODULES) $(STD_CONTAINER_MODULES) $(STD_RANGE_MODULES) std/regex/package $(EXTRA_DOCUMENTABLES))
+STDDOC = $(DOCSRC)/html.ddoc $(DOCSRC)/dlang.org.ddoc $(DOCSRC)/std_navbar-prerelease.ddoc $(DOCSRC)/std.ddoc $(DOCSRC)/macros.ddoc
+BIGSTDDOC = $(DOCSRC)/std_consolidated.ddoc $(DOCSRC)/macros.ddoc
 # Set DDOC, the documentation generator
 DDOC=$(DMD) -m$(MODEL) -w -c -o- -version=StdDdoc \
 	-I$(DRUNTIME_PATH)/import $(DMDEXTRAFLAGS)
 
 # Set DRUNTIME name and full path
+ifneq (,$(DRUNTIME))
+	CUSTOM_DRUNTIME=1
+endif
 ifeq (,$(findstring win,$(OS)))
 	DRUNTIME = $(DRUNTIME_PATH)/lib/libdruntime-$(OS)$(MODEL).a
-	DRUNTIMESO = $(DRUNTIME_PATH)/lib/libdruntime-$(OS)$(MODEL)so.a
+	DRUNTIMESO = $(basename $(DRUNTIME))so.a
 else
 	DRUNTIME = $(DRUNTIME_PATH)/lib/druntime.lib
 endif
@@ -180,7 +187,7 @@ STD_MODULES = $(addprefix std/, algorithm array ascii base64 bigint \
 		cstream csv datetime demangle encoding exception	\
 		file format functional getopt json math mathspecial	\
 		metastrings mmfile numeric outbuffer parallelism path	\
-		process random range signals socket socketstream	\
+		process random signals socket socketstream	\
 		stdint stdio stdiobase stream string syserror system traits		\
 		typecons typetuple uni uri utf uuid variant xml zip zlib)
 
@@ -188,6 +195,8 @@ STD_NET_MODULES = $(addprefix std/net/, isemail curl)
 
 STD_REGEX_MODULES = $(addprefix std/regex/, package $(addprefix internal/, \
 	generator ir parser backtracking kickstart tests thompson))
+
+STD_RANGE_MODULES = $(addprefix std/range/, package primitives interfaces)
 
 STD_DIGEST_MODULES = $(addprefix std/digest/, digest crc md ripemd sha)
 
@@ -215,11 +224,12 @@ EXTRA_MODULES += $(EXTRA_DOCUMENTABLES) $(addprefix			\
 	std/internal/math/, biguintcore biguintnoasm biguintx86	\
 	gammafunction errorfunction) $(addprefix std/internal/, \
 	cstring processinit unicode_tables scopebuffer\
-	unicode_comp unicode_decomp unicode_grapheme unicode_norm)
+	unicode_comp unicode_decomp unicode_grapheme unicode_norm) \
+	$(addprefix std/internal/test/, dummyrange)
 
 # Aggregate all D modules relevant to this build
 D_MODULES = $(STD_MODULES) $(EXTRA_MODULES) $(STD_NET_MODULES) \
-	$(STD_DIGEST_MODULES) $(STD_CONTAINER_MODULES) $(STD_REGEX_MODULES)
+	$(STD_DIGEST_MODULES) $(STD_CONTAINER_MODULES) $(STD_REGEX_MODULES) $(STD_RANGE_MODULES)
 # Add the .d suffix to the module names
 D_FILES = $(addsuffix .d,$(D_MODULES))
 # Aggregate all D modules over all OSs (this is for the zip file)
@@ -375,6 +385,9 @@ endif
 	cp -r etc/* $(INSTALL_DIR)/src/phobos/etc/
 	cp LICENSE_1_0.txt $(INSTALL_DIR)/phobos-LICENSE.txt
 
+ifeq (1,$(CUSTOM_DRUNTIME))
+# We consider a custom-set DRUNTIME a sign they build druntime themselves
+else
 # This rule additionally produces $(DRUNTIMESO). Add a fake dependency
 # to always invoke druntime's make. Use FORCE instead of .PHONY to
 # avoid rebuilding phobos when $(DRUNTIME) didn't change.
@@ -386,6 +399,8 @@ $(DRUNTIMESO): $(DRUNTIME)
 endif
 
 FORCE:
+
+endif
 
 ###########################################################
 # html documentation
@@ -411,6 +426,12 @@ $(DOC_OUTPUT_DIR)/std_c_windows_%.html : std/c/windows/%.d $(STDDOC)
 	$(DDOC) -Df$@ $<
 
 $(DOC_OUTPUT_DIR)/std_container_%.html : std/container/%.d $(STDDOC)
+	$(DDOC) project.ddoc $(STDDOC) -Df$@ $<
+
+$(DOC_OUTPUT_DIR)/std_range_%.html : std/range/%.d $(STDDOC)
+	$(DDOC) project.ddoc $(STDDOC) -Df$@ $<
+
+$(DOC_OUTPUT_DIR)/std_regex_%.html : std/regex/%.d $(STDDOC)
 	$(DDOC) project.ddoc $(STDDOC) -Df$@ $<
 
 $(DOC_OUTPUT_DIR)/std_net_%.html : std/net/%.d $(STDDOC)

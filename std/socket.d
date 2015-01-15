@@ -34,6 +34,7 @@
  */
 
 /**
+ * Socket primitives.
  * Example: See $(SAMPLESRC listener.d) and $(SAMPLESRC htmlget.d)
  * License: $(WEB www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Authors: Christopher E. Miller, $(WEB klickverbot.at, David Nadlinger),
@@ -62,9 +63,9 @@ version(Windows)
     pragma (lib, "ws2_32.lib");
     pragma (lib, "wsock32.lib");
 
-    private import core.sys.windows.windows, std.c.windows.winsock, std.windows.syserror;
-    private alias _ctimeval = std.c.windows.winsock.timeval;
-    private alias _clinger = std.c.windows.winsock.linger;
+    private import core.sys.windows.windows, core.sys.windows.winsock2, std.windows.syserror;
+    private alias _ctimeval = core.sys.windows.winsock2.timeval;
+    private alias _clinger = core.sys.windows.winsock2.linger;
 
     enum socket_t : SOCKET { INVALID_SOCKET }
     private const int _SOCKET_ERROR = SOCKET_ERROR;
@@ -181,6 +182,14 @@ string formatSocketError(int err) @trusted
                 return "Socket error " ~ to!string(err);
         }
         else version (FreeBSD)
+        {
+            auto errs = strerror_r(err, buf.ptr, buf.length);
+            if (errs == 0)
+                cs = buf.ptr;
+            else
+                return "Socket error " ~ to!string(err);
+        }
+        else version (Solaris)
         {
             auto errs = strerror_r(err, buf.ptr, buf.length);
             if (errs == 0)
@@ -1007,7 +1016,7 @@ AddressInfo[] getAddressInfo(T...)(in char[] node, T options) @trusted
 
 private AddressInfo[] getAddressInfoImpl(in char[] node, in char[] service, addrinfo* hints) @system
 {
-	import std.array : appender;
+        import std.array : appender;
 
     if (getaddrinfoPointer && freeaddrinfoPointer)
     {
@@ -1652,6 +1661,23 @@ public:
                 return null;
             return host.name;
         }
+    }
+
+    /**
+     * Compares with another InternetAddress of same type for equality
+     * Returns: true if the InternetAddresses share the same address and
+     * port number.
+     * Examples:
+     * --------------
+     * InternetAddress addr1,addr2;
+     * if (addr1 == addr2) { }
+     * --------------
+     */
+    override bool opEquals(Object o) const
+    {
+        auto other = cast(InternetAddress)o;
+        return other && this.sin.sin_addr.s_addr == other.sin.sin_addr.s_addr &&
+            this.sin.sin_port == other.sin.sin_port;
     }
 
     /**

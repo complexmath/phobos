@@ -1,6 +1,10 @@
 // Written in the D programming language.
 
 /**
+ * Contains the elementary mathematical functions (powers, roots,
+ * and trigonometric functions), and low-level floating-point operations.
+ * Mathematical special functions are available in $(D std.mathspecial).
+ *
 $(SCRIPT inhibitQuickIndex = 1;)
 
 $(BOOKTABLE ,
@@ -50,13 +54,6 @@ $(TR $(TDNW Hardware Control) $(TD
 ))
 )
 
-
- * Elementary mathematical functions
- *
- * Contains the elementary mathematical functions (powers, roots,
- * and trigonometric functions), and low-level floating-point operations.
- * Mathematical special functions are available in std.mathspecial.
- *
  * The functionality closely follows the IEEE754-2008 standard for
  * floating-point arithmetic, including the use of camelCase names rather
  * than C99-style lower case names. All of these functions behave correctly
@@ -79,13 +76,14 @@ $(TR $(TDNW Hardware Control) $(TD
  *
  * Macros:
  *      WIKI = Phobos/StdMath
- *      MYREF = <font face='Consolas, "Bitstream Vera Sans Mono", "Andale Mono", Monaco, "DejaVu Sans Mono", "Lucida Console", monospace'><a href="#.$1">$1</a>&nbsp;</font>
  *
  *      TABLE_SV = <table border=1 cellpadding=4 cellspacing=0>
  *              <caption>Special Values</caption>
  *              $0</table>
  *      SVH = $(TR $(TH $1) $(TH $2))
  *      SV  = $(TR $(TD $1) $(TD $2))
+ *      TH3 = $(TR $(TH $1) $(TH $2) $(TH $3))
+ *      TD3 = $(TR $(TD $1) $(TD $2) $(TD $3))
  *
  *      NAN = $(RED NAN)
  *      SUP = <span style="vertical-align:super;font-size:smaller">$0</span>
@@ -140,15 +138,10 @@ version(DigitalMars)
     version = INLINE_YL2X;        // x87 has opcodes for these
 }
 
-version (X86)
-{
-    version = X86_Any;
-}
-
-version (X86_64)
-{
-    version = X86_Any;
-}
+version (X86)    version = X86_Any;
+version (X86_64) version = X86_Any;
+version (PPC)    version = PPC_Any;
+version (PPC64)  version = PPC_Any;
 
 version(D_InlineAsm_X86)
 {
@@ -571,23 +564,43 @@ unittest
 real cos(real x) @safe pure nothrow @nogc;       /* intrinsic */
 
 /***********************************
- * Returns sine of x. x is in radians.
+ * Returns $(WEB en.wikipedia.org/wiki/Sine, sine) of x. x is in $(WEB en.wikipedia.org/wiki/Radian, radians).
  *
  *      $(TABLE_SV
- *      $(TR $(TH x)               $(TH sin(x))      $(TH invalid?))
- *      $(TR $(TD $(NAN))          $(TD $(NAN))      $(TD yes))
- *      $(TR $(TD $(PLUSMN)0.0)    $(TD $(PLUSMN)0.0) $(TD no))
- *      $(TR $(TD $(PLUSMNINF))    $(TD $(NAN))      $(TD yes))
+ *      $(TH3 x           ,  sin(x)      ,  invalid?)
+ *      $(TD3 $(NAN)      ,  $(NAN)      ,  yes     )
+ *      $(TD3 $(PLUSMN)0.0,  $(PLUSMN)0.0,  no      )
+ *      $(TD3 $(PLUSMNINF),  $(NAN)      ,  yes     )
  *      )
+ *
+ * Params:
+ *      x = angle in radians (not degrees)
+ * Returns:
+ *      sine of x
+ * See_Also:
+ *      $(MYREF cos), $(MYREF tan), $(MYREF asin)
  * Bugs:
  *      Results are undefined if |x| >= $(POWER 2,64).
  */
 
 real sin(real x) @safe pure nothrow @nogc;       /* intrinsic */
 
+///
+unittest
+{
+    import std.math : sin, PI;
+    import std.stdio : writefln;
+
+    void main()
+    {
+      real x = 30.0;
+      auto result = sin(x * (PI / 180)); // convert degrees to radians
+      writefln("The sine of %s degrees is %s", x, result);
+    }
+}
 
 /***********************************
- *  sine, complex and imaginary
+ *  Returns sine for complex and imaginary arguments.
  *
  *  sin(z) = sin(z.re)*cosh(z.im) + cos(z.re)*sinh(z.im)i
  *
@@ -1444,10 +1457,10 @@ creal sqrt(creal z) @nogc @safe pure nothrow
 }
 
 /**
- * Calculates e$(SUP x).
+ * Calculates e$(SUPERSCRIPT x).
  *
  *  $(TABLE_SV
- *    $(TR $(TH x)             $(TH e$(SUP x)) )
+ *    $(TR $(TH x)             $(TH e$(SUPERSCRIPT x)) )
  *    $(TR $(TD +$(INFIN))     $(TD +$(INFIN)) )
  *    $(TR $(TD -$(INFIN))     $(TD +0.0)      )
  *    $(TR $(TD $(NAN))        $(TD $(NAN))    )
@@ -1540,7 +1553,7 @@ unittest
  * than exp(x)-1.
  *
  *  $(TABLE_SV
- *    $(TR $(TH x)             $(TH e$(SUP x)-1)  )
+ *    $(TR $(TH x)             $(TH e$(SUPERSCRIPT x)-1)  )
  *    $(TR $(TD $(PLUSMN)0.0)  $(TD $(PLUSMN)0.0) )
  *    $(TR $(TD +$(INFIN))     $(TD +$(INFIN))    )
  *    $(TR $(TD -$(INFIN))     $(TD -1.0)         )
@@ -1769,7 +1782,7 @@ L_largenegative:
 
 
 /**
- * Calculates 2$(SUP x).
+ * Calculates 2$(SUPERSCRIPT x).
  *
  *  $(TABLE_SV
  *    $(TR $(TH x)             $(TH exp2(x))   )
@@ -2141,7 +2154,7 @@ unittest
  *
  * Returns:
  *      Calculate and return $(I x) and $(I exp) such that
- *      value =$(I x)*2$(SUP exp) and
+ *      value =$(I x)*2$(SUPERSCRIPT exp) and
  *      .5 $(LT)= |$(I x)| $(LT) 1.0
  *
  *      $(I x) has same sign as value.
@@ -2494,7 +2507,7 @@ alias FP_ILOGBNAN = core.stdc.math.FP_ILOGBNAN;
 
 
 /*******************************************
- * Compute n * 2$(SUP exp)
+ * Compute n * 2$(SUPERSCRIPT exp)
  * References: frexp
  */
 
@@ -2993,7 +3006,7 @@ unittest
  * If x is subnormal, it is treated as if it were normalized.
  * For a positive, finite x:
  *
- * 1 $(LT)= $(I x) * FLT_RADIX$(SUP -logb(x)) $(LT) FLT_RADIX
+ * 1 $(LT)= $(I x) * FLT_RADIX$(SUPERSCRIPT -logb(x)) $(LT) FLT_RADIX
  *
  *      $(TABLE_SV
  *      $(TR $(TH x)                 $(TH logb(x))   $(TH divide by 0?) )
@@ -3074,7 +3087,7 @@ real modf(real x, ref real i) @trusted nothrow @nogc
 }
 
 /*************************************
- * Efficiently calculates x * 2$(SUP n).
+ * Efficiently calculates x * 2$(SUPERSCRIPT n).
  *
  * scalbn handles underflow and overflow in
  * the same fashion as the basic arithmetic operators.
@@ -3873,28 +3886,16 @@ private:
         // Don't bother about subnormals, they are not supported on most CPUs.
         //  SUBNORMAL_MASK = 0x02;
     }
-    else version (PPC)
+    else version (PPC_Any)
     {
         // PowerPC FPSCR is a 32-bit register.
         enum : int
         {
-            INEXACT_MASK   = 0x600,
-            UNDERFLOW_MASK = 0x010,
-            OVERFLOW_MASK  = 0x008,
-            DIVBYZERO_MASK = 0x020,
-            INVALID_MASK   = 0xF80 // PowerPC has five types of invalid exceptions.
-        }
-    }
-    else version (PPC64)
-    {
-        // PowerPC FPSCR is a 32-bit register.
-        enum : int
-        {
-            INEXACT_MASK   = 0x600,
-            UNDERFLOW_MASK = 0x010,
-            OVERFLOW_MASK  = 0x008,
-            DIVBYZERO_MASK = 0x020,
-            INVALID_MASK   = 0xF80 // PowerPC has five types of invalid exceptions.
+            INEXACT_MASK   = 0x02000000,
+            DIVBYZERO_MASK = 0x04000000,
+            UNDERFLOW_MASK = 0x08000000,
+            OVERFLOW_MASK  = 0x10000000,
+            INVALID_MASK   = 0x20000000 // Summary as PowerPC has five types of invalid exceptions.
         }
     }
     else version (ARM)
@@ -4090,6 +4091,16 @@ struct FloatingPointControl
             roundToZero    = 0xC00000
         }
     }
+    else version(PPC_Any)
+    {
+        enum : RoundingMode
+        {
+            roundToNearest = 0x00000000,
+            roundDown      = 0x00000003,
+            roundUp        = 0x00000002,
+            roundToZero    = 0x00000001
+        }
+    }
     else
     {
         enum : RoundingMode
@@ -4121,6 +4132,22 @@ struct FloatingPointControl
                                  | inexactException | subnormalException,
         }
     }
+    else version(PPC_Any)
+    {
+        enum : uint
+        {
+            inexactException      = 0x0008,
+            divByZeroException    = 0x0010,
+            underflowException    = 0x0020,
+            overflowException     = 0x0040,
+            invalidException      = 0x0080,
+            /// Severe = The overflow, division by zero, and invalid exceptions.
+            severeExceptions   = overflowException | divByZeroException
+                                 | invalidException,
+            allExceptions      = severeExceptions | underflowException
+                                 | inexactException,
+        }
+    }
     else
     {
         enum : uint
@@ -4145,6 +4172,11 @@ private:
         enum uint EXCEPTION_MASK = 0x9F00;
         enum uint ROUNDING_MASK = 0xC00000;
     }
+    else version(PPC_Any)
+    {
+        enum uint EXCEPTION_MASK = 0x00F8;
+        enum uint ROUNDING_MASK = 0x0003;
+    }
     else version(X86)
     {
         enum ushort EXCEPTION_MASK = 0x3F;
@@ -4162,9 +4194,9 @@ public:
     /// Returns true if the current FPU supports exception trapping
     @property static bool hasExceptionTraps() @safe nothrow @nogc
     {
-        version(X86)
+        version(X86_Any)
             return true;
-        else version(X86_64)
+        else version(PPC_Any)
             return true;
         else version(ARM)
         {
@@ -4185,10 +4217,10 @@ public:
     {
         assert(hasExceptionTraps);
         initialize();
-        version(ARM)
-            setControlState(getControlState() | (exceptions & EXCEPTION_MASK));
-        else
+        version(X86_Any)
             setControlState(getControlState() & ~(exceptions & EXCEPTION_MASK));
+        else
+            setControlState(getControlState() | (exceptions & EXCEPTION_MASK));
     }
 
     /// Disable (mask) specific hardware exceptions. Multiple exceptions may be ORed together.
@@ -4196,10 +4228,10 @@ public:
     {
         assert(hasExceptionTraps);
         initialize();
-        version(ARM)
-            setControlState(getControlState() & ~(exceptions & EXCEPTION_MASK));
-        else
+        version(X86_Any)
             setControlState(getControlState() | (exceptions & EXCEPTION_MASK));
+        else
+            setControlState(getControlState() & ~(exceptions & EXCEPTION_MASK));
     }
 
     //// Change the floating-point hardware rounding mode
@@ -4213,10 +4245,10 @@ public:
     @property static uint enabledExceptions() @nogc
     {
         assert(hasExceptionTraps);
-        version(ARM)
-            return (getControlState() & EXCEPTION_MASK);
-        else
+        version(X86_Any)
             return (getControlState() & EXCEPTION_MASK) ^ EXCEPTION_MASK;
+        else
+            return (getControlState() & EXCEPTION_MASK);
     }
 
     /// Return the currently active rounding mode
@@ -4239,6 +4271,10 @@ private:
     bool initialized = false;
 
     version(ARM)
+    {
+        alias ControlState = uint;
+    }
+    else version(PPC_Any)
     {
         alias ControlState = uint;
     }
@@ -4271,7 +4307,7 @@ private:
     }
 
     // Read from the control register
-    static ushort getControlState() @trusted nothrow @nogc
+    static ControlState getControlState() @trusted nothrow @nogc
     {
         version (D_InlineAsm_X86)
         {
@@ -4299,7 +4335,7 @@ private:
     }
 
     // Set the control register
-    static void setControlState(ushort newState) @trusted nothrow @nogc
+    static void setControlState(ControlState newState) @trusted nothrow @nogc
     {
         version (InlineAsm_X86_Any)
         {
@@ -4814,7 +4850,7 @@ unittest
     foreach (X; TypeTuple!(float, double, real, int, long))
     {
         foreach (Y; TypeTuple!(float, double, real))
-        {
+        (){ // avoid slow optimizations for large functions @@@BUG@@@ 2396
             X x = 21;
             Y y = 23.8;
             Y e = void;
@@ -4839,7 +4875,7 @@ unittest
                 e = copysign(X.nan, -y);
                 assert(isNaN(e) && signbit(e));
             }
-        }
+        }();
     }
 }
 
@@ -5382,7 +5418,7 @@ real fmin(real x, real y) @safe pure nothrow @nogc { return x < y ? x : y; }
 real fma(real x, real y, real z) @safe pure nothrow @nogc { return (x * y) + z; }
 
 /*******************************************************************
- * Compute the value of x $(SUP n), where n is an integer
+ * Compute the value of x $(SUPERSCRIPT n), where n is an integer
  */
 Unqual!F pow(F, G)(F x, G n) @nogc @trusted pure nothrow
     if (isFloatingPoint!(F) && isIntegral!(G))
@@ -5549,7 +5585,7 @@ real pow(I, F)(I x, F y) @nogc @trusted pure nothrow
 }
 
 /*********************************************
- * Calculates x$(SUP y).
+ * Calculates x$(SUPERSCRIPT y).
  *
  * $(TABLE_SV
  * $(TR $(TH x) $(TH y) $(TH pow(x, y))

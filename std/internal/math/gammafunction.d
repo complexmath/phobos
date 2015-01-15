@@ -1503,13 +1503,12 @@ done:
     return y;
 }
 
-version(unittest) import core.stdc.stdio;
 unittest {
     // Exact values
     assert(digamma(1)== -EULERGAMMA);
     assert(feqrel(digamma(0.25), -PI/2 - 3* LN2 - EULERGAMMA) >= real.mant_dig-7);
     assert(feqrel(digamma(1.0L/6), -PI/2 *sqrt(3.0L) - 2* LN2 -1.5*log(3.0L) - EULERGAMMA) >= real.mant_dig-7);
-    assert(digamma(-5).isNaN);
+    assert(digamma(-5).isNaN());
     assert(feqrel(digamma(2.5), -EULERGAMMA - 2*LN2 + 2.0 + 2.0L/3) >= real.mant_dig-9);
     assert(isIdentical(digamma(NaN(0xABC)), NaN(0xABC)));
 

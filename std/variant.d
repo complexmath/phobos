@@ -605,8 +605,6 @@ public:
         static assert(allowed!(T), "Cannot store a " ~ T.stringof
             ~ " in a " ~ VariantN.stringof ~ ". Valid types are "
                 ~ AllowedTypes.stringof);
-        // Assignment should destruct previous value
-        fptr(OpID.destruct, &store, null);
 
         static if (is(T : VariantN))
         {
@@ -620,6 +618,9 @@ public:
         }
         else
         {
+            // Assignment should destruct previous value
+            fptr(OpID.destruct, &store, null);
+
             static if (T.sizeof <= size)
             {
                 // If T is a class we're only copying the reference, so it
@@ -779,13 +780,22 @@ public:
 
     @property T get(T)() if (!is(T == const))
     {
-        union Buf
-        {
-            TypeInfo info;
-            T result;
-        }
         auto p = *cast(T**) &store;
-        Buf buf = { typeid(T) };
+
+        /* handler(OpID.get, ) expects the TypeInfo for T in the same buffer it
+         * writes the result to afterwards. Because T might have a non-trivial
+         * destructor, postblit or invariant, we cannot use a union.
+         */
+        struct Buf
+        {
+            T result;
+            // Make sure Buf.sizeof is big enough to store a TypeInfo in
+            void[T.sizeof < TypeInfo.sizeof ? TypeInfo.sizeof - T.sizeof : 0] init = void;
+        }
+        TypeInfo info = typeid(T);
+        Buf buf;
+        memcpy(&buf, &info, info.sizeof);
+
         if (fptr(OpID.get, &store, &buf))
         {
             throw new VariantException(type, typeid(T));
@@ -795,16 +805,26 @@ public:
 
     @property T get(T)() const if (is(T == const))
     {
-        union Buf
+        auto p = *cast(T**) &store;
+
+        /* handler(OpID.get, ) expects the TypeInfo for T in the same buffer it
+         * writes the result to afterwards. Because T might have a non-trivial
+         * destructor, postblit or invariant, we cannot use a union.
+         */
+        struct Buf
         {
-            TypeInfo info;
             static if (is(T == shared))
                 shared(Unqual!T) result;
             else
                 Unqual!T result;
+
+            // Make sure Buf.sizeof is big enough to store a TypeInfo in
+            void[T.sizeof < TypeInfo.sizeof ? TypeInfo.sizeof - T.sizeof : 0] init = void;
         }
-        auto p = *cast(T**) &store;
-        Buf buf = { typeid(T) };
+        TypeInfo info = typeid(T);
+        Buf buf;
+        memcpy(&buf, &info, info.sizeof);
+
         if (fptr(OpID.get, cast(ubyte[size]*) &store, &buf))
         {
             throw new VariantException(type, typeid(T));
@@ -935,7 +955,7 @@ public:
         {
             string tryUseType(string tp)
             {
-                import std.string : format;
+                import std.format : format;
                 return q{
                     static if (allowed!%1$s && T.allowed!%1$s)
                         if (convertsTo!%1$s && other.convertsTo!%1$s)
@@ -2493,6 +2513,17 @@ unittest
         @disable this();
     }
     auto a = appender!(T[]);
+}
+
+unittest
+{
+    // Bugzilla 13871
+    alias A = Algebraic!(int, typeof(null));
+    static struct B { A value; }
+    alias C = std.variant.Algebraic!B;
+
+    C var;
+    var = C(B());
 }
 
 unittest

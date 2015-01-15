@@ -14,6 +14,7 @@ Authors:   $(WEB digitalmars.com, Walter Bright),
            Jonathan M Davis,
            Alex Rønne Petersen,
            Damian Ziemba
+           Amaury SECHET
 Source: $(PHOBOSSRC std/_bitmanip.d)
 */
 /*
@@ -26,17 +27,13 @@ module std.bitmanip;
 
 //debug = bitarray;                // uncomment to turn on debugging printf's
 
-import core.bitop;
-import std.format;
-import std.range;
-import std.string;
+import std.range.primitives;
 import std.system;
 import std.traits;
 
 version(unittest)
 {
     import std.stdio;
-    import std.typetuple;
 }
 
 
@@ -163,6 +160,50 @@ private template createFields(string store, size_t offset, Ts...)
     }
 }
 
+private ulong getBitsForAlign(ulong a)
+{
+    ulong bits = 0;
+    while ((a & 0x01) == 0)
+    {
+        bits++;
+        a >>= 1;
+    }
+
+    assert(a == 1, "alignment is not a power of 2");
+    return bits;
+}
+
+private template createReferenceAccessor(string store, T, ulong bits, string name)
+{
+    enum mask = (1UL << bits) - 1;
+    // getter
+    enum result = "@property "~T.stringof~" "~name~"() @trusted pure nothrow @nogc const { auto result = "
+        ~ "("~store~" & "~myToString(~mask)~");"
+        ~ " return cast("~T.stringof~") cast(void*) result;}\n"
+    // setter
+        ~"@property void "~name~"("~T.stringof~" v) @trusted pure nothrow @nogc { "
+        ~"assert(((cast(typeof("~store~")) cast(void*) v) & "~myToString(mask)~`) == 0, "Value not properly aligned for '`~name~`'"); `
+        ~store~" = cast(typeof("~store~"))"
+        ~" (("~store~" & (cast(typeof("~store~")) "~myToString(mask)~"))"
+        ~" | ((cast(typeof("~store~")) cast(void*) v) & (cast(typeof("~store~")) "~myToString(~mask)~")));}\n";
+}
+
+private template sizeOfBitField(T...)
+{
+    static if(T.length < 2)
+        enum sizeOfBitField = 0;
+    else
+        enum sizeOfBitField = T[2] + sizeOfBitField!(T[3 .. $]);
+}
+
+private template createTaggedReference(string store, T, ulong a, string name, Ts...)
+{
+	static assert(sizeOfBitField!Ts <= getBitsForAlign(a), "Fields must fit in the bits know to be zero because of alignment.");
+    enum result
+        = createReferenceAccessor!(store, T, sizeOfBitField!Ts, name).result
+        ~ createFields!(store, 0, Ts, size_t, "", T.sizeof * 8 - sizeOfBitField!Ts).result;
+}
+
 /**
 Allows creating bit fields inside $(D_PARAM struct)s and $(D_PARAM
 class)es.
@@ -213,6 +254,73 @@ bool), followed by unsigned types, followed by signed types.
 template bitfields(T...)
 {
     enum { bitfields = createFields!(createStoreName!(T), 0, T).result }
+}
+
+/**
+This string mixin generator allows one to create tagged pointers inside $(D_PARAM struct)s and $(D_PARAM class)es.
+
+A tagged pointer uses the bits known to be zero in a normal pointer or class reference to store extra information.
+For example, a pointer to an integer must be 4-byte aligned, so there are 2 bits that are always known to be zero.
+One can store a 2-bit integer there.
+
+
+Example:
+
+----
+struct A
+{
+    int a;
+    mixin(taggedPointer!(
+        uint*, "x",
+        bool, "b1", 1,
+        bool, "b2", 1));
+}
+A obj;
+obj.x = new int;
+obj.b1 = true;
+obj.b2 = false;
+----
+
+The example above creates a tagged pointer in the struct A. The pointer is of type
+$(D uint*) as specified by the first argument, and is named x, as specified by the second
+argument.
+
+Following arguments works the same way as $(D bitfield)'s. The bitfield must fit into the
+bits known to be zero because of the pointer alignement.
+*/
+
+template taggedPointer(T : T*, string name, Ts...) {
+    enum taggedPointer = createTaggedReference!(createStoreName!(T, name, 0, Ts), T*, T.alignof, name, Ts).result;
+}
+
+/**
+This string mixin generator allows one to create tagged class reference inside $(D_PARAM struct)s and $(D_PARAM class)es.
+
+A tagged class reference uses the bits known to be zero in a normal class reference to store extra information.
+For example, a pointer to an integer must be 4-byte aligned, so there are 2 bits that are always known to be zero.
+One can store a 2-bit integer there.
+
+Example:
+
+----
+struct A
+{
+    int a;
+    mixin(taggedClassRef!(
+        Object, "o",
+        uint, "i", 2));
+}
+A obj;
+obj.o = new Object();
+obj.i = 3;
+----
+
+The example above creates a tagged reference to an Object in the struct A. This expects the same parameters
+as $(D taggedPointer), except the first argument which must be a class type instead of a pointer type.
+*/
+
+template taggedClassRef(T, string name, Ts...) if(is(T == class)) {
+    enum taggedClassRef = createTaggedReference!(createStoreName!(T, name, 0, Ts), T, 8, name, Ts).result;
 }
 
 @safe pure nothrow @nogc
@@ -280,6 +388,59 @@ unittest
     t2b.d = -5; assert(t2b.d == -5);
     t2b.e = -5; assert(t2b.e == -5);
     t4b.a = -5; assert(t4b.a == -5L);
+}
+
+unittest
+{
+    struct Test5
+    {
+        mixin(taggedPointer!(
+            int*, "a",
+            uint, "b", 2));
+    }
+
+    Test5 t5;
+    t5.a = null;
+    t5.b = 3;
+    assert(t5.a is null);
+    assert(t5.b == 3);
+
+    int myint = 42;
+    t5.a = &myint;
+    assert(t5.a is &myint);
+    assert(t5.b == 3);
+
+    struct Test6
+    {
+        mixin(taggedClassRef!(
+            Object, "o",
+            bool, "b", 1));
+    }
+
+    Test6 t6;
+    t6.o = null;
+    t6.b = false;
+    assert(t6.o is null);
+    assert(t6.b == false);
+
+    auto o = new Object();
+    t6.o = o;
+    t6.b = true;
+    assert(t6.o is o);
+    assert(t6.b == true);
+}
+
+unittest
+{
+    static assert(!__traits(compiles,
+        taggedPointer!(
+            int*, "a",
+            uint, "b", 3)));
+
+    static assert(!__traits(compiles,
+        taggedClassRef!(
+            Object, "a",
+            uint, "b", 4)));
 }
 
 unittest
@@ -541,6 +702,9 @@ unittest
 
 struct BitArray
 {
+    import std.format : FormatSpec;
+    import core.bitop: bts, btr, bsf, bt;
+
     size_t len;
     size_t* ptr;
     enum bitsPerSizeT = size_t.sizeof * 8;
@@ -1546,6 +1710,234 @@ public:
         assert(c[2] == 0);
     }
 
+    // Rolls double word (upper, lower) to the right by n bits and returns the
+    // lower word of the result.
+    private static size_t rollRight()(size_t upper, size_t lower, size_t nbits)
+        pure @safe nothrow @nogc
+    in
+    {
+        assert(nbits < bitsPerSizeT);
+    }
+    body
+    {
+        return (upper << (bitsPerSizeT - nbits)) | (lower >> nbits);
+    }
+
+    unittest
+    {
+        static if (size_t.sizeof == 8)
+        {
+            size_t x = 0x12345678_90ABCDEF;
+            size_t y = 0xFEDBCA09_87654321;
+
+            assert(rollRight(x, y, 32) == 0x90ABCDEF_FEDBCA09);
+            assert(rollRight(y, x, 4) == 0x11234567_890ABCDE);
+        }
+        else static if (size_t.sizeof == 4)
+        {
+            size_t x = 0x12345678;
+            size_t y = 0x90ABCDEF;
+
+            assert(rollRight(x, y, 16) == 0x567890AB);
+            assert(rollRight(y, x, 4) == 0xF1234567);
+        }
+        else
+            static assert(0, "Unsupported size_t width");
+    }
+
+    // Rolls double word (upper, lower) to the left by n bits and returns the
+    // upper word of the result.
+    private static size_t rollLeft()(size_t upper, size_t lower, size_t nbits)
+        pure @safe nothrow @nogc
+    in
+    {
+        assert(nbits < bitsPerSizeT);
+    }
+    body
+    {
+        return (upper << nbits) | (lower >> (bitsPerSizeT - nbits));
+    }
+
+    unittest
+    {
+        static if (size_t.sizeof == 8)
+        {
+            size_t x = 0x12345678_90ABCDEF;
+            size_t y = 0xFEDBCA09_87654321;
+
+            assert(rollLeft(x, y, 32) == 0x90ABCDEF_FEDBCA09);
+            assert(rollLeft(y, x, 4) == 0xEDBCA098_76543211);
+        }
+        else static if (size_t.sizeof == 4)
+        {
+            size_t x = 0x12345678;
+            size_t y = 0x90ABCDEF;
+
+            assert(rollLeft(x, y, 16) == 0x567890AB);
+            assert(rollLeft(y, x, 4) == 0x0ABCDEF1);
+        }
+    }
+
+    /**
+     * Operator $(D <<=) support.
+     *
+     * Shifts all the bits in the array to the left by the given number of
+     * bits.  The leftmost bits are dropped, and 0's are appended to the end
+     * to fill up the vacant bits.
+     *
+     * $(RED Warning: unused bits in the final word up to the next word
+     * boundary may be overwritten by this operation. It does not attempt to
+     * preserve bits past the end of the array.)
+     */
+    void opOpAssign(string op)(size_t nbits) @nogc pure nothrow
+        if (op == "<<")
+    {
+        size_t wordsToShift = nbits / bitsPerSizeT;
+        size_t bitsToShift = nbits % bitsPerSizeT;
+
+        if (wordsToShift < dim)
+        {
+            foreach_reverse (i; 1 .. dim - wordsToShift)
+            {
+                ptr[i + wordsToShift] = rollLeft(ptr[i], ptr[i-1],
+                                                 bitsToShift);
+            }
+            ptr[wordsToShift] = rollLeft(ptr[0], 0, bitsToShift);
+        }
+
+        import std.algorithm : min;
+        foreach (i; 0 .. min(wordsToShift, dim))
+        {
+            ptr[i] = 0;
+        }
+    }
+
+    /**
+     * Operator $(D >>=) support.
+     *
+     * Shifts all the bits in the array to the right by the given number of
+     * bits.  The rightmost bits are dropped, and 0's are inserted at the back
+     * to fill up the vacant bits.
+     *
+     * $(RED Warning: unused bits in the final word up to the next word
+     * boundary may be overwritten by this operation. It does not attempt to
+     * preserve bits past the end of the array.)
+     */
+    void opOpAssign(string op)(size_t nbits) @nogc pure nothrow
+        if (op == ">>")
+    {
+        size_t wordsToShift = nbits / bitsPerSizeT;
+        size_t bitsToShift = nbits % bitsPerSizeT;
+
+        if (wordsToShift + 1 < dim)
+        {
+            foreach (i; 0 .. dim - wordsToShift - 1)
+            {
+                ptr[i] = rollRight(ptr[i + wordsToShift + 1],
+                                   ptr[i + wordsToShift], bitsToShift);
+            }
+        }
+
+        // The last word needs some care, as it must shift in 0's from past the
+        // end of the array.
+        if (wordsToShift < dim)
+        {
+            ptr[dim - wordsToShift - 1] = rollRight(0, ptr[dim - 1] & endMask,
+                                                    bitsToShift);
+        }
+
+        import std.algorithm : min;
+        foreach (i; 0 .. min(wordsToShift, dim))
+        {
+            ptr[dim - i - 1] = 0;
+        }
+    }
+
+    unittest
+    {
+        import std.format : format;
+
+        BitArray b;
+        b.init([1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1]);
+
+        b <<= 1;
+        assert(format("%b", b) == "01100_10101101");
+
+        b >>= 1;
+        assert(format("%b", b) == "11001_01011010");
+
+        b <<= 4;
+        assert(format("%b", b) == "00001_10010101");
+
+        b >>= 5;
+        assert(format("%b", b) == "10010_10100000");
+
+        b <<= 13;
+        assert(format("%b", b) == "00000_00000000");
+
+        b.init([1, 0, 1, 1, 0, 1, 1, 1]);
+        b >>= 8;
+        assert(format("%b", b) == "00000000");
+
+    }
+
+    // Test multi-word case
+    unittest
+    {
+        import std.format : format;
+        BitArray b;
+
+        // This has to be long enough to occupy more than one size_t. On 64-bit
+        // machines, this would be at least 64 bits.
+        b.init([
+            1, 0, 0, 0, 0, 0, 0, 0,  1, 1, 0, 0, 0, 0, 0, 0,
+            1, 1, 1, 0, 0, 0, 0, 0,  1, 1, 1, 1, 0, 0, 0, 0,
+            1, 1, 1, 1, 1, 0, 0, 0,  1, 1, 1, 1, 1, 1, 0, 0,
+            1, 1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 1, 1,
+            1, 0, 1, 0, 1, 0, 1, 0,  0, 1, 0, 1, 0, 1, 0, 1,
+        ]);
+        b <<= 8;
+        assert(format("%b", b) ==
+               "00000000_10000000_"~
+               "11000000_11100000_"~
+               "11110000_11111000_"~
+               "11111100_11111110_"~
+               "11111111_10101010");
+
+        // Test right shift of more than one size_t's worth of bits
+        b <<= 68;
+        assert(format("%b", b) ==
+               "00000000_00000000_"~
+               "00000000_00000000_"~
+               "00000000_00000000_"~
+               "00000000_00000000_"~
+               "00000000_00001000");
+
+        b.init([
+            1, 0, 0, 0, 0, 0, 0, 0,  1, 1, 0, 0, 0, 0, 0, 0,
+            1, 1, 1, 0, 0, 0, 0, 0,  1, 1, 1, 1, 0, 0, 0, 0,
+            1, 1, 1, 1, 1, 0, 0, 0,  1, 1, 1, 1, 1, 1, 0, 0,
+            1, 1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 1, 1,
+            1, 0, 1, 0, 1, 0, 1, 0,  0, 1, 0, 1, 0, 1, 0, 1,
+        ]);
+        b >>= 8;
+        assert(format("%b", b) ==
+               "11000000_11100000_"~
+               "11110000_11111000_"~
+               "11111100_11111110_"~
+               "11111111_10101010_"~
+               "01010101_00000000");
+
+        // Test left shift of more than 1 size_t's worth of bits
+        b >>= 68;
+        assert(format("%b", b) ==
+               "01010000_00000000_"~
+               "00000000_00000000_"~
+               "00000000_00000000_"~
+               "00000000_00000000_"~
+               "00000000_00000000");
+    }
+
     /***************************************
      * Return a string representation of this BitArray.
      *
@@ -1571,6 +1963,8 @@ public:
     ///
     unittest
     {
+        import std.format : format;
+
         debug(bitarray) printf("BitArray.toString unittest\n");
         BitArray b;
         b.init([0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1]);
@@ -1588,6 +1982,7 @@ public:
     @property auto bitsSet() const nothrow
     {
         import std.algorithm : filter, map, joiner;
+        import std.range : iota;
 
         return iota(dim).
                filter!(i => ptr[i])().
@@ -1615,6 +2010,7 @@ public:
     unittest
     {
         import std.algorithm : equal;
+        import std.range : iota;
 
         debug(bitarray) printf("BitArray.bitsSet unittest\n");
         BitArray b;
@@ -1677,6 +2073,8 @@ public:
 
 unittest
 {
+    import std.format : format;
+
     BitArray b;
 
     b.init([]);
@@ -1733,17 +2131,20 @@ private ushort swapEndianImpl(ushort val) @safe pure nothrow @nogc
 
 private uint swapEndianImpl(uint val) @trusted pure nothrow @nogc
 {
+    import core.bitop: bswap;
     return bswap(val);
 }
 
 private ulong swapEndianImpl(ulong val) @trusted pure nothrow @nogc
 {
+    import core.bitop: bswap;
     immutable ulong res = bswap(cast(uint)val);
     return res << 32 | bswap(cast(uint)(val >> 32));
 }
 
 unittest
 {
+    import std.typetuple;
     foreach(T; TypeTuple!(bool, byte, ubyte, short, ushort, int, uint, long, ulong, char, wchar, dchar))
     {
         scope(failure) writefln("Failed type: %s", T.stringof);
@@ -1870,6 +2271,7 @@ private auto nativeToBigEndianImpl(T)(T val) @safe pure nothrow @nogc
 
 unittest
 {
+    import std.typetuple;
     foreach(T; TypeTuple!(bool, byte, ubyte, short, ushort, int, uint, long, ulong,
                           char, wchar, dchar
         /* The trouble here is with floats and doubles being compared against nan
@@ -2065,6 +2467,7 @@ private auto nativeToLittleEndianImpl(T)(T val) @safe pure nothrow @nogc
 
 unittest
 {
+    import std.typetuple;
     foreach(T; TypeTuple!(bool, byte, ubyte, short, ushort, int, uint, long, ulong,
                           char, wchar, dchar/*,
                           float, double*/))
@@ -2205,6 +2608,7 @@ private template isFloatOrDouble(T)
 
 unittest
 {
+    import std.typetuple;
     foreach(T; TypeTuple!(float, double))
     {
         static assert(isFloatOrDouble!(T));
@@ -2233,6 +2637,7 @@ private template canSwapEndianness(T)
 
 unittest
 {
+    import std.typetuple;
     foreach(T; TypeTuple!(bool, ubyte, byte, ushort, short, uint, int, ulong,
                           long, char, wchar, dchar, float, double))
     {
@@ -3267,6 +3672,7 @@ void append(T, Endian endianness = Endian.bigEndian, R)(R range, T value)
 //Verify Example.
 unittest
 {
+    import std.array;
     auto buffer = appender!(const ubyte[])();
     buffer.append!ushort(261);
     assert(buffer.data == [1, 5]);
@@ -3280,6 +3686,7 @@ unittest
 
 unittest
 {
+    import std.array;
     {
         //bool
         auto buffer = appender!(const ubyte[])();
@@ -3410,8 +3817,9 @@ unittest
 
 unittest
 {
-    import std.string;
-
+    import std.format : format;
+    import std.array;
+    import std.typetuple;
     foreach(endianness; TypeTuple!(Endian.bigEndian, Endian.littleEndian))
     {
         auto toWrite = appender!(ubyte[])();
@@ -3454,6 +3862,7 @@ For signed integers, the sign bit is included in the count.
 private uint countTrailingZeros(T)(T value) @nogc pure nothrow
     if (isIntegral!T)
 {
+    import core.bitop : bsf;
     // bsf doesn't give the correct result for 0.
     if (!value)
         return 8 * T.sizeof;
@@ -3485,6 +3894,7 @@ unittest
 
 unittest
 {
+    import std.typetuple;
     foreach (T; TypeTuple!(byte, ubyte, short, ushort, int, uint, long, ulong))
     {
         assert(countTrailingZeros(cast(T)0) == 8 * T.sizeof);
@@ -3565,6 +3975,7 @@ unittest
 
 unittest
 {
+    import std.typetuple;
     foreach (T; TypeTuple!(byte, ubyte, short, ushort, int, uint, long, ulong))
     {
         assert(countBitsSet(cast(T)0) == 0);
@@ -3652,6 +4063,7 @@ auto bitsSet(T)(T value) @nogc pure nothrow
 unittest
 {
     import std.algorithm : equal;
+    import std.range : iota;
 
     assert(bitsSet(1).equal([0]));
     assert(bitsSet(5).equal([0, 2]));
@@ -3662,7 +4074,9 @@ unittest
 unittest
 {
     import std.algorithm : equal;
+    import std.range: iota;
 
+    import std.typetuple;
     foreach (T; TypeTuple!(byte, ubyte, short, ushort, int, uint, long, ulong))
     {
         assert(bitsSet(cast(T)0).empty);
